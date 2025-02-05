@@ -9,6 +9,7 @@ import "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 import "./Core.sol";
 
 contract Room is Ownable, ReentrancyGuard {
+    error Room_RoundNotClosed(uint256 currentRoundId);
     error Room_RoundActive(uint256 roundId);
     error Room_RoundInactive();
     error Room_AlreadyParticipant();
@@ -19,7 +20,6 @@ contract Room is Ownable, ReentrancyGuard {
     error Room_NoWinnings();
     error Room_InvalidBetType();
     error Room_RoundNotProcessing();
-    
 
     enum BetType {
         NONE,
@@ -60,7 +60,7 @@ contract Room is Ownable, ReentrancyGuard {
         uint256 muteForaMinuteFee;
     }
 
-    struct UserBet { 
+    struct UserBet {
         BetType bettype;
         uint256 amount;
         bool refunded;
@@ -88,12 +88,13 @@ contract Room is Ownable, ReentrancyGuard {
     );
     event FeesDistributed(uint256 indexed roundId);
     event WinningsClaimed(uint256 indexed roundId, address indexed user, uint256 winnings);
-    event BetUpdated(uint256 indexed roundId, address indexed user, address agent,BetType newbetType, uint256 newamount);
+    event BetUpdated(
+        uint256 indexed roundId, address indexed user, address agent, BetType newbetType, uint256 newamount
+    );
     event RoundStateUpdated(uint256 indexed currentRoundId, RoundState state);
     event AgentDecisionSubmitted(uint256 indexed roundId, address agent, BetType betType);
     event MarketResolved(uint256 indexed roundId);
-
-    
+    event FeesUpdated(uint256 roomEntryFee, uint256 messageInjectionFee, uint256 muteForaMinuteFee);
 
     constructor(
         address tokenaddress,
@@ -127,8 +128,8 @@ contract Room is Ownable, ReentrancyGuard {
     }
 
     function startRound() public {
-        if (rounds[currentRoundId].endTime > block.timestamp) {
-            revert Room_RoundActive(currentRoundId);
+        if (rounds[currentRoundId].state != RoundState.CLOSED) {
+            revert Room_RoundNotClosed(currentRoundId);
         }
         currentRoundId++;
         /* rounds[currentRoundId] = Round({
@@ -150,9 +151,10 @@ contract Room is Ownable, ReentrancyGuard {
             messageInjectionFee: messageInjectionFee,
             muteForaMinuteFee: muteForaMinuteFee
         });
+        emit FeesUpdated(roomEntryFee, messageInjectionFee, muteForaMinuteFee);
     }
 
-    function joinRoom() public {
+    function joinRoom() public nonReentrant {
         Round storage round = rounds[currentRoundId];
         if (round.state != RoundState.ACTIVE) revert Room_RoundInactive();
         if (roomParticipants[msg.sender]) revert Room_AlreadyParticipant();
@@ -184,10 +186,10 @@ contract Room is Ownable, ReentrancyGuard {
         emit MutedForaMinute(msg.sender, currentRoundId, agentToMute);
     }
 
-    function placeBet(address agent, BetType betType, uint256 amount) public {
+    function placeBet(address agent, BetType betType, uint256 amount) public nonReentrant {
         Round storage round = rounds[currentRoundId];
         if (round.state != RoundState.ACTIVE) {
-            revert Room_RoundNotActive(currentRoundId);
+            revert Room_RoundInactive();
         }
         if (!isAgent[agent]) {
             revert Room_AgentNotActive(agent);
@@ -208,37 +210,34 @@ contract Room is Ownable, ReentrancyGuard {
         userBet.bettype = betType;
         userBet.amount = amount;
 
-        
         emit BetPlaced(msg.sender, currentRoundId, agent, betType, amount);
     }
+
     function updateBet(address agent, BetType newBetType, uint256 newAmount) external nonReentrant {
         Round storage round = rounds[currentRoundId];
-        if(round.state != RoundState.ACTIVE) revert Room_RoundInactive();
-        if(newAmount == 0) revert Room_InvalidAmount();
+        if (round.state != RoundState.ACTIVE) revert Room_RoundInactive();
+        if (newAmount == 0) revert Room_InvalidAmount();
 
         UserBet storage userBet = round.bets[msg.sender];
         AgentPosition storage position = round.agentPositions[agent];
 
-        if(userBet.bettype == BetType.BUY) {
+        if (userBet.bettype == BetType.BUY) {
             position.buyPool -= userBet.amount;
         } else {
             position.notBuyPool -= userBet.amount;
         }
 
-        if(newAmount > userBet.amount) {
+        if (newAmount > userBet.amount) {
             uint256 additionalAmount = newAmount - userBet.amount;
             USDC.transferFrom(msg.sender, address(this), additionalAmount);
-        }
-        else if(newAmount <userBet.amount - newAmount){
+        } else if (newAmount < userBet.amount - newAmount) {
             uint256 refundAmount = userBet.amount - newAmount;
-            USDC.transfer(msg.sender,refundAmount);
+            USDC.transfer(msg.sender, refundAmount);
         }
         userBet.bettype = newBetType;
         userBet.amount = newAmount;
-        emit BetUpdated(currentRoundId, msg.sender, agent, newBetType,newAmount);
-        }
-
-    
+        emit BetUpdated(currentRoundId, msg.sender, agent, newBetType, newAmount);
+    }
 
     function claimWinnings(uint256 roundId) public nonReentrant {
         Round storage round = rounds[roundId];
@@ -277,8 +276,7 @@ contract Room is Ownable, ReentrancyGuard {
                 if (winningPool > 0) {
                     totalWinnings += (userBet.amount * totalPool) / winningPool;
                 }
-            }
-            else {
+            } else {
                 totalWinnings += userBet.amount;
             }
             unchecked {
@@ -288,8 +286,9 @@ contract Room is Ownable, ReentrancyGuard {
         return totalWinnings;
     }
     //gamemaster or the agents can call
+
     function submitAgentDecision(address agent, BetType decision) public {
-        if(!isAgent[agent]) revert Room_AgentNotActive(agent);
+        if (!isAgent[agent]) revert Room_AgentNotActive(agent);
         Round storage round = rounds[currentRoundId];
         if (round.state != RoundState.PROCESSING) revert Room_RoundNotProcessing();
         AgentPosition storage position = round.agentPositions[agent];
@@ -302,111 +301,111 @@ contract Room is Ownable, ReentrancyGuard {
     function refundBets(uint256 roundId, address agent) internal {
         Round storage round = rounds[roundId];
         AgentPosition storage position = round.agentPositions[agent];
-        if(!position.hasDecided) {
-            for(uint256 i; i < 5; i++){
+        if (!position.hasDecided) {
+            for (uint256 i; i < 5; i++) {
                 address user = agents[i];
                 UserBet storage userBet = round.bets[user];
-                if(userBet.bettype == BetType.BUY){
+                if (userBet.bettype == BetType.BUY) {
                     USDC.transfer(user, userBet.amount);
-                }
-                else{
+                } else {
                     USDC.transfer(user, userBet.amount);
                 }
             }
         }
     }
 
-    function resolveMarket() public{
+    function resolveMarket() public {
         Round storage round = rounds[currentRoundId];
         _distributeFees(currentRoundId);
         round.state = RoundState.CLOSED;
         emit MarketResolved(currentRoundId);
     }
 
-    function checkUpKeep(bytes calldata) external view  returns (bool upkeepNeeded, bytes memory)
-    { //ask team if frontend can. chainlink means, creating subscription + link for every room contract
+    function checkUpKeep(bytes calldata) external view returns (bool upkeepNeeded, bytes memory) {
+        //ask team if frontend can. chainlink means, creating subscription + link for every room contract
         Round storage round = rounds[currentRoundId];
-        if(round.state == RoundState.ACTIVE && block.timestamp >= round.endTime){
+        if (round.state == RoundState.ACTIVE && block.timestamp >= round.endTime) {
             return (true, "");
         }
-        if(round.state == RoundState.PROCESSING && block.timestamp >= round.endTime + PROCESSING_DURATION){
+        if (round.state == RoundState.PROCESSING && block.timestamp >= round.endTime + PROCESSING_DURATION) {
             return (true, "");
         }
         return (false, "");
-
     }
+
     function performUpKeep(bytes calldata) external {
-    Round storage round = rounds[currentRoundId];
+        Round storage round = rounds[currentRoundId];
 
-    if(round.state == RoundState.ACTIVE && block.timestamp >= round.endTime) {
-        round.state = RoundState.PROCESSING;
-        emit RoundStateUpdated(currentRoundId, RoundState.PROCESSING);
-    }
-    else if (round.state == RoundState.PROCESSING && block.timestamp >= round.endTime + PROCESSING_DURATION){
-        resolveMarket();
-    }
+        if (round.state == RoundState.ACTIVE && block.timestamp >= round.endTime) {
+            round.state = RoundState.PROCESSING;
+            emit RoundStateUpdated(currentRoundId, RoundState.PROCESSING);
+        } else if (round.state == RoundState.PROCESSING && block.timestamp >= round.endTime + PROCESSING_DURATION) {
+            resolveMarket();
+        }
     }
 
-    function _distributeFees(uint256 roundId) internal{
+    function _distributeFees(uint256 roundId) internal {
         Round storage round = rounds[roundId];
         uint256 totalFees = round.totalFees;
 
-        (, , uint256 roomCreatorPercent, uint256 agentCreatorPercent, uint256 daoPercent) = core.getFees();
+        (,, uint256 roomCreatorPercent, uint256 agentCreatorPercent, uint256 daoPercent) = core.getFees();
 
         uint256 basisPoint = core.BASIS_POINTS();
-        
-        uint256 roomCreatorCut = (totalFees * roomCreatorPercent)/basisPoint;
+
+        uint256 roomCreatorCut = (totalFees * roomCreatorPercent) / basisPoint;
         uint256 agentCreatorCut = (totalFees * agentCreatorPercent) / basisPoint;
-    
+
         USDC.transfer(creator, roomCreatorCut);
 
         uint256 agentCreatorShare = agentCreatorCut / 5;
-        for(uint256 i; i < 5; i++){
+        for (uint256 i; i < 5; i++) {
             (address agentcreator,) = core.getAgent(agents[i]);
             USDC.transfer(agentcreator, agentCreatorShare);
         }
         uint256 totalDistributed = roomCreatorCut + (agentCreatorShare * 5);
         uint256 dust = totalFees - totalDistributed - daoPercent;
         address dao = core.dao();
-        USDC.transfer(dao,daoPercent + dust);
-      
-        emit FeesDistributed(roundId);
+        USDC.transfer(dao, daoPercent + dust);
 
+        emit FeesDistributed(roundId);
     }
 
-    function getRoomFees() public view returns (RoomFees memory){
+    function getRoomFees() public view returns (RoomFees memory) {
         return fees;
     }
-    function getRoundState(uint256 roundId) public view returns (RoundState){
+
+    function getRoundState(uint256 roundId) public view returns (RoundState) {
         return rounds[roundId].state;
     }
-    function getRoundStartTime(uint256 roundId) public view returns (uint40)
-    {
+
+    function getRoundStartTime(uint256 roundId) public view returns (uint40) {
         return rounds[roundId].startTime;
     }
-    function getRoundEndTime(uint256 roundId) public view returns (uint40)
-    {
+
+    function getRoundEndTime(uint256 roundId) public view returns (uint40) {
         return rounds[roundId].endTime;
     }
-    function getUserBet(uint256 roundId, address user) public view returns (UserBet memory){
+
+    function getUserBet(uint256 roundId, address user) public view returns (UserBet memory) {
         return rounds[roundId].bets[user];
     }
-    function getAgentPosition(uint256 roundId, address agent) public view returns (AgentPosition memory)
-    {
+
+    function getAgentPosition(uint256 roundId, address agent) public view returns (AgentPosition memory) {
         return rounds[roundId].agentPositions[agent];
     }
-    function checkIsAgent(address agent) public view returns (bool)
-    {
+
+    function checkIsAgent(address agent) public view returns (bool) {
         return isAgent[agent];
     }
-    function checkRoomParticipant(address participant) public view returns(bool)
-    {
+
+    function checkRoomParticipant(address participant) public view returns (bool) {
         return roomParticipants[participant];
     }
-    function getHasClaimedWinnings(uint256 roundId, address user) public view returns(bool)
-    {
+
+    function getHasClaimedWinnings(uint256 roundId, address user) public view returns (bool) {
         return rounds[roundId].hasClaimedWinnings[user];
     }
-    
-
+    //check access controls for fn
+    //check team if indexed param for events
+    //additional overrides for gamemaster ,more acess controls?
 }

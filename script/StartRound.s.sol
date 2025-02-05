@@ -8,9 +8,9 @@ contract StartRound is Script {
     function run(address roomAddress) public {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         Room room = Room(roomAddress);
-        
+
         vm.startBroadcast(deployerPrivateKey);
         room.startRound();
         vm.stopBroadcast();
     }
-} 
+}

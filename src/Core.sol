@@ -22,6 +22,7 @@ contract Core is Ownable {
     error Core__AgentNotActive(address agent);
     error Core__AgentDoesNotExist(address agent);
     error Core__InvalidRoomAgents();
+
     struct FeeStructure {
         uint256 agentCreationFee;
         uint256 roomCreationFee;
@@ -156,7 +157,7 @@ contract Core is Ownable {
         if (roomAgents.length > 5) {
             revert Core__InvalidRoomAgents();
         }
-        if (msg.value != fees.roomCreationFee) { 
+        if (msg.value != fees.roomCreationFee) {
             revert Core__IncorrectRoomCreationFee();
         }
 
@@ -170,7 +171,7 @@ contract Core is Ownable {
             }
         }
 
-        Room newRoom = new  Room(
+        Room newRoom = new Room(
             tokenAddress,
             msg.sender,
             address(this),

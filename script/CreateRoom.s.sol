@@ -12,7 +12,8 @@ contract CreateRoom is Script {
 
         vm.startBroadcast(deployerPrivateKey);
         // Get the fees from core contract
-        (uint256 roomCreationFee, uint256 agentCreationFee, uint256 minBet, uint256 treasuryFee, uint256 referralFee) = core.getFees();
+        (uint256 roomCreationFee, uint256 agentCreationFee, uint256 minBet, uint256 treasuryFee, uint256 referralFee) =
+            core.getFees();
         // Create room with the correct fee
         address roomAddress = core.createRoom{value: roomCreationFee}(tokenAddress, agents);
         vm.stopBroadcast();
