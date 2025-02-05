@@ -9,6 +9,12 @@ out/
 
 # Docs
 docs/
+# Foundry
+cache/
+out/
+broadcast/
+lib/
 
 # Dotenv file
 .env
+.envrc
