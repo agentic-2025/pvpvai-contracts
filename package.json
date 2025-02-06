@@ -1,0 +1,25 @@
+{
+  "name": "pvp-ai-contracts",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "generate-types": "./scripts/generate-types.sh"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentic-2025/pvp-ai-contracts.git"
+  },
+  "author": "",
+  "bugs": {
+    "url": "https://github.com/agentic-2025/pvp-ai-contracts/issues"
+  },
+  "homepage": "https://github.com/agentic-2025/pvp-ai-contracts#readme",
+  "dependencies": {
+    "@wagmi/cli": "^2.2.0"
+  }
+}
