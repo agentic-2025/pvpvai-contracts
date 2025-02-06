@@ -16,6 +16,11 @@ contract DeployDiamond is Script {
         // Deploy PvP Facet
         PvPFacet pvpFacet = new PvPFacet();
 
+        pvpFacet.updateSupportedPvpActions("silence", IPvP.PvpActionCategory.STATUS_EFFECT, 100000, 15);
+        pvpFacet.updateSupportedPvpActions("deafen", IPvP.PvpActionCategory.STATUS_EFFECT, 100000, 15);
+        pvpFacet.updateSupportedPvpActions("poison", IPvP.PvpActionCategory.STATUS_EFFECT, 300000, 15);
+        pvpFacet.updateSupportedPvpActions("attack", IPvP.PvpActionCategory.DIRECT_ACTION, 200000, 0);
+
         // Get function selectors for PvP Facet
         bytes4[] memory selectors = new bytes4[](5);
         selectors[0] = PvPFacet.updateSupportedPvpActions.selector;

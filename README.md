@@ -49,3 +49,10 @@ forge script script/CreateRoom.s.sol --rpc-url base_sepolia --broadcast \
 forge script script/JoinRoom.s.sol --rpc-url base_sepolia --broadcast \
   --sig "run(address,address)" $ROOM_ADDRESS $USER_ADDRESS
 ```
+
+
+### Run the core deploy and room setup script
+
+```
+forge script script/SetupGameTest.s.sol --rpc-url $BASE_SEPOLIA_RPC_URL --broadcast --private-keys $PRIVATE_KEY --private-keys $ACCOUNT1_PRIVATE_KEY --private-keys $ACCOUNT2_PRIVATE_KEY --private-keys $ACCOUNT3_PRIVATE_KEY
+```

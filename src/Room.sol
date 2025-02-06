@@ -9,13 +9,14 @@ import "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 import "./Core.sol";
 import "./interfaces/IPvP.sol";
 import "forge-std/console2.sol";
+import "./facets/PvPFacet.sol";
 
 interface IPvPFacet is IPvP {}
 
 contract Room is Ownable, ReentrancyGuard {
     error Room_RoundNotClosed(uint256 currentRoundId);
     error Room_RoundActive(uint256 roundId);
-    error Room_RoundInactive();
+    error Room_RoundInactive(RoundState roundState);
     error Room_AlreadyParticipant();
     error Room_NotParticipant();
     error Room_AgentNotActive(address agent);
@@ -33,7 +34,6 @@ contract Room is Ownable, ReentrancyGuard {
     error Room_InvalidPvpAction();
     error Room_InvalidFee();
     error Room_InvalidDuration();
-    error Room_ActionNotSupported();
     error Room_InsufficientBalance();
     error Room_TransferFailed();
     error Room_InvalidAgents();
@@ -80,7 +80,6 @@ contract Room is Ownable, ReentrancyGuard {
         uint256 totalBetsBuy;
         uint256 totalBetsHold;
         uint256 totalBetsSell;
-        bool pvpEnabled;
         mapping(address => UserBet) bets;
         mapping(address => AgentPosition) agentPositions;
         mapping(address => bool) hasClaimedWinnings;
@@ -187,6 +186,14 @@ contract Room is Ownable, ReentrancyGuard {
 
         initialized = true;
         diamond = _diamond;
+
+        // Initialize the first round's PvP storage
+        Round storage round = rounds[currentRoundId];
+        round.state = RoundState.ACTIVE;
+
+        // Initialize PvP Facet's storage for this round
+        PvPFacet(diamond).updateRoundState(currentRoundId, uint8(RoundState.ACTIVE));
+
     }
 
     // Will worry about colledting the fee for the agent creator later, let's just get something functional for now
@@ -220,7 +227,7 @@ contract Room is Ownable, ReentrancyGuard {
 
     function joinRoom() public nonReentrant {
         Round storage round = rounds[currentRoundId];
-        if (round.state != RoundState.ACTIVE) revert Room_RoundInactive();
+        if (round.state != RoundState.ACTIVE) revert Room_RoundInactive(round.state);
         if (roomParticipants[msg.sender]) revert Room_AlreadyParticipant();
         uint256 amount = fees.roomEntryFee;
         USDC.transferFrom(msg.sender, address(this), amount);
@@ -236,7 +243,7 @@ contract Room is Ownable, ReentrancyGuard {
 
         Round storage round = rounds[currentRoundId];
         if (round.state != RoundState.ACTIVE) {
-            revert Room_RoundInactive();
+            revert Room_RoundInactive(round.state);
         }
         if (!isAgent[agent]) {
             revert Room_AgentNotActive(agent);
@@ -264,7 +271,7 @@ contract Room is Ownable, ReentrancyGuard {
 
     function updateBet(address agent, BetType newBetType, uint256 newAmount) external nonReentrant {
         Round storage round = rounds[currentRoundId];
-        if (round.state != RoundState.ACTIVE) revert Room_RoundInactive();
+        if (round.state != RoundState.ACTIVE) revert Room_RoundInactive(round.state);
         if (newAmount == 0) revert Room_InvalidAmount();
 
         UserBet storage userBet = round.bets[msg.sender];
@@ -334,27 +341,20 @@ contract Room is Ownable, ReentrancyGuard {
     }
 
     function startRound() public onlyGameMaster {
-        if (rounds[currentRoundId].state != RoundState.CLOSED) {
+        if (rounds[currentRoundId].state != RoundState.INACTIVE && rounds[currentRoundId].state != RoundState.CLOSED) {
             revert Room_RoundNotClosed(currentRoundId);
         }
-
-        // Add check for active agents
-        bool hasActiveAgents = false;
-        for (uint256 i = 0; i < agents.length; i++) {
-            if (isAgent[agents[i]]) {
-                hasActiveAgents = true;
-                break;
-            }
-        }
-        if (!hasActiveAgents) revert Room_InvalidAgents();
 
         currentRoundId++;
         Round storage round = rounds[currentRoundId];
         round.startTime = uint40(block.timestamp);
         round.endTime = uint40(block.timestamp + roundDuration);
-        round.pvpEnabled = pvpEnabled;
-
         round.state = RoundState.ACTIVE;
+
+        // Update PvP Facet's storage
+        PvPFacet(diamond).updateRoundState(currentRoundId, uint8(RoundState.ACTIVE));
+        PvPFacet(diamond).startRound(currentRoundId);
+
         emit RoundStarted(currentRoundId, round.startTime, round.endTime);
     }
 
@@ -395,8 +395,14 @@ contract Room is Ownable, ReentrancyGuard {
         Round storage round = rounds[currentRoundId];
         _distributeFees(currentRoundId);
         round.state = RoundState.CLOSED;
+        // Update PvP Facet's storage
+        try PvPFacet(diamond).updateRoundState(currentRoundId, uint8(RoundState.CLOSED)) {}
+        catch {
+            console2.log("Failed to update PvP Facet round state");
+        }
         emit MarketResolved(currentRoundId);
     }
+
 
     function checkUpKeep(bytes calldata) external view returns (bool upkeepNeeded, bytes memory) {
         //ask team if frontend can. chainlink means, creating subscription + link for every room contract
@@ -415,6 +421,11 @@ contract Room is Ownable, ReentrancyGuard {
 
         if (round.state == RoundState.ACTIVE && block.timestamp >= round.endTime) {
             round.state = RoundState.PROCESSING;
+            // Update PvP Facet's storage
+            try PvPFacet(diamond).updateRoundState(currentRoundId, uint8(RoundState.PROCESSING)) {}
+            catch {
+                console2.log("Failed to update PvP Facet round state");
+            }
             emit RoundStateUpdated(currentRoundId, RoundState.PROCESSING);
         } else if (round.state == RoundState.PROCESSING && block.timestamp >= round.endTime + PROCESSING_DURATION) {
             resolveMarket();
@@ -473,9 +484,9 @@ contract Room is Ownable, ReentrancyGuard {
         return rounds[roundId].agentPositions[agent];
     }
 
-    function checkIsAgent(address agent) public view returns (bool) {
-        return isAgent[agent];
-    }
+    // function checkIsAgent(address agent) public view returns (bool) {
+    //     return isAgent[agent];
+    // }
 
     function checkRoomParticipant(address participant) public view returns (bool) {
         return roomParticipants[participant];
@@ -486,6 +497,7 @@ contract Room is Ownable, ReentrancyGuard {
     }
 
     function invokePvpAction(address target, string memory verb, bytes memory parameters) public {
+        console2.log("(Room) Invoking PvP action", verb, "on ", target);
         IPvPFacet(diamond).invokePvpAction(target, verb, parameters);
     }
 

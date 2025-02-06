@@ -26,4 +26,7 @@ interface IPvP {
     function invokePvpAction(address target, string memory verb, bytes memory parameters) external;
     function getSupportedPvpActions() external view returns (PvpAction[] memory);
     function getPvpStatuses(uint256 roundId, address agent) external view returns (PvpStatus[] memory);
+    function updateRoundState(uint256 roundId, uint8 state) external;
+    function startRound(uint256 roundId) external;
+    function setGlobalPvpEnabled(bool enabled) external;
 }

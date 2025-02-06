@@ -6,6 +6,9 @@ import {Core} from "../src/Core.sol";
 import {MockUSDC} from "../src/test/MockUSDC.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Room} from "../src/Room.sol";
+import {Diamond} from "../src/Diamond.sol";
+import {PvPFacet} from "../src/facets/PvPFacet.sol";
+import {IPvP} from "../src/interfaces/IPvP.sol";
 
 contract SetupGameTest is Script {
     address public deployer;
@@ -27,6 +30,9 @@ contract SetupGameTest is Script {
     uint256 public agentKey1;
     uint256 public agentKey2;
     uint256 public agentKey3;
+
+    Diamond public diamond;
+    PvPFacet public pvpFacet;
 
     function setUp() public {
         // Add debug logging
@@ -101,11 +107,72 @@ contract SetupGameTest is Script {
         Room roomImplementation = new Room();
         console2.log("Room implementation deployed at:", address(roomImplementation));
 
+        // Deploy Diamond and PvP Facet before Room deployment
+        vm.startBroadcast(deployer);
+
+        // Deploy Diamond
+        diamond = new Diamond();
+        console2.log("Diamond deployed at:", address(diamond));
+
+        // Deploy PvP Facet
+        pvpFacet = new PvPFacet();
+        console2.log("PvP Facet deployed at:", address(pvpFacet));
+
+        // Get function selectors for PvP Facet
+        bytes4[] memory selectors = new bytes4[](8);
+        selectors[0] = PvPFacet.updateSupportedPvpActions.selector;
+        selectors[1] = PvPFacet.removeSupportedPvpActions.selector;
+        selectors[2] = PvPFacet.invokePvpAction.selector;
+        selectors[3] = PvPFacet.getSupportedPvpActions.selector;
+        selectors[4] = PvPFacet.getPvpStatuses.selector;
+        selectors[5] = PvPFacet.updateRoundState.selector;
+        selectors[6] = PvPFacet.updatePvpEnabled.selector;
+        selectors[7] = PvPFacet.setGlobalPvpEnabled.selector;
+
+        // Add PvP Facet to Diamond
+        diamond.addFacet(address(pvpFacet), selectors);
+        console2.log("PvP Facet added to Diamond");
+
+        // Initialize PvP settings
+        PvPFacet(address(diamond)).setGlobalPvpEnabled(true);
+
+        // Initialize some PvP actions
+        PvPFacet(address(diamond)).updateSupportedPvpActions(
+            "silence",
+            IPvP.PvpActionCategory.STATUS_EFFECT,
+            0, // fee
+            60 // duration in seconds
+        );
+
+        PvPFacet(address(diamond)).updateSupportedPvpActions(
+            "deafen",
+            IPvP.PvpActionCategory.STATUS_EFFECT,
+            0, // fee
+            60 // duration in seconds
+        );
+
+        PvPFacet(address(diamond)).updateSupportedPvpActions(
+            "poison",
+            IPvP.PvpActionCategory.STATUS_EFFECT,
+            0, // fee
+            60 // duration in seconds
+        );
+
+        PvPFacet(address(diamond)).updateSupportedPvpActions(
+            "attack",
+            IPvP.PvpActionCategory.DIRECT_ACTION,
+            0, // fee
+            0 // duration in seconds
+        );
+
+        PvPFacet(address(diamond)).updatePvpEnabled(0, true);
+
+        vm.stopBroadcast();
+
         // Add diamond deployment here - wait for previous broadcast to complete
         vm.startBroadcast(deployer); // Use startBroadcast instead of multiple broadcasts
         // You'll need to deploy your diamond contract here
-        address diamond = address(0); // Replace this with actual diamond deployment
-        console2.log("Diamond deployed at:", diamond);
+        console2.log("Diamond deployed at:", address(diamond));
 
         core.setRoomImplementation(address(roomImplementation));
         console2.log("Room implementation set in Core");
@@ -180,7 +247,7 @@ contract SetupGameTest is Script {
             account1, // creator
             address(usdc), // token address
             agentWallets,
-            diamond // Add diamond address here
+            address(diamond) // Use the deployed diamond address
         );
 
         console2.log("\nRoom created at:", roomAddress);
