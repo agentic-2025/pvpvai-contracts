@@ -7,9 +7,9 @@ interface IRoom {
         address token,
         address creator,
         address core,
-        address usdc,
         uint256 roomEntryFee,
         address[] memory initialAgents,
-        address diamond
+        address[] memory initialAgentFeeRecipients,
+        uint256[] memory initialAgentIds
     ) external;
 }

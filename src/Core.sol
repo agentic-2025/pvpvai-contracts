@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/proxy/Clones.sol";
 import "./interfaces/IRoom.sol";
+import "forge-std/console2.sol";
 // Core contract managing agent creation, permissions, fees, and registry
 
 contract Core is Ownable, ReentrancyGuard {
@@ -61,8 +62,6 @@ contract Core is Ownable, ReentrancyGuard {
 
     // Alternate wallets for the agent to sandbox spending in trading rooms, input address is the alt, what you receive is the agent wallet
     address public immutable USDC;
-
-    address public roomImplementation;
 
     event FeesSet(
         uint256 indexed roomCreationFee,
@@ -173,16 +172,14 @@ contract Core is Ownable, ReentrancyGuard {
         emit BalanceWithdrawn(msg.sender, amount);
     }
 
-    function setRoomImplementation(address implementation) external onlyOwner {
-        roomImplementation = implementation;
-    }
-
     function createRoom(
         address gameMaster,
         address creator,
         address tokenAddress,
         address[] memory roomAgentWallets,
-        address diamond // Add diamond parameter
+        address[] memory roomAgentFeeRecipients,
+        uint256[] memory roomAgentIds,
+        address roomImplementation
     ) external payable onlyOwner returns (address) {
         // Check if the token address is a valid ERC20 tokenAddress
         // TODO shallow check, should check all functions that are needed for real trading
@@ -192,48 +189,52 @@ contract Core is Ownable, ReentrancyGuard {
         // }
 
         // Check if there is enough balance for creator to cover the room creation fee
+        console2.log("Checking balance for room creation fee");
         if (balances[creator] < fees.roomCreationFee) {
+            console2.log("Insufficient balance for room creation fee");
             revert Core__InsufficientBalance();
         }
+        console2.log("Checking if there is at least one agent");
         // Check if there is at least one agent
         if (roomAgentWallets.length == 0) {
+            console2.log("No agents provided");
             revert Core__InvalidRoomAgents();
         }
+        console2.log("Checking if there are too many agents");
         if (roomAgentWallets.length > maxAgentsPerRoom) {
+            console2.log("Too many agents provided");
             revert Core__InvalidRoomAgents();
         }
-        // if (msg.value != fees.roomCreationFee) {
-        //     revert Core__IncorrectRoomCreationFee();
-        // }
-
+        console2.log("Checking if all agents are valid");
         for (uint256 i = 0; i < roomAgentWallets.length; i++) {
             address agentAddress = roomAgentWallets[i];
+            console2.log("Checking agent wallet");
+
             (uint256 agentId, bool isActive,) = getAgentByWallet(agentAddress);
             if (agentId == 0) {
+                console2.log("Agent wallet not found");
                 revert Core__AgentWalletNotFound(agentAddress);
             }
             if (!isActive) {
+                console2.log("Agent not active");
                 revert Core__AgentNotActive(agentId);
             }
         }
-
-        if (roomImplementation == address(0)) {
-            revert Core__RoomImplementationNotSet();
-        }
+        console2.log("All agents are valid");
 
         // Deploy minimal proxy clone of the room implementation
         address newRoom = Clones.clone(roomImplementation);
-
+        console2.log("Cloned room implementation, now initializing");
         // Initialize the room with diamond address
         IRoom(newRoom).initialize(
             gameMaster,
             tokenAddress,
             creator,
             address(this),
-            USDC,
             0.01 ether, // roomEntryFee
             roomAgentWallets,
-            diamond // Pass diamond address
+            roomAgentFeeRecipients,
+            roomAgentIds
         );
 
         RoomStructure memory room = RoomStructure({
@@ -286,6 +287,10 @@ contract Core is Ownable, ReentrancyGuard {
 
     function getAgentByWallet(address wallet) public view returns (uint256, bool, address) {
         uint256 agentId = agentWallets[wallet];
+        console2.log("Getting agent by wallet");
+        console2.log("Agent ID:", agentId);
+        console2.log("Is Active:", agents[agentId].isActive);
+        console2.log("Creator:", agents[agentId].creator);
         return (agentId, agents[agentId].isActive, agents[agentId].creator); //if you get a 0 address, no agent found
     }
 

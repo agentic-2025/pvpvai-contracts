@@ -6,9 +6,6 @@ import {Core} from "../src/Core.sol";
 import {MockUSDC} from "../src/test/MockUSDC.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Room} from "../src/Room.sol";
-import {Diamond} from "../src/Diamond.sol";
-import {PvPFacet} from "../src/facets/PvPFacet.sol";
-import {IPvP} from "../src/interfaces/IPvP.sol";
 
 contract SetupGameTest is Script {
     address public deployer;
@@ -22,17 +19,6 @@ contract SetupGameTest is Script {
     uint256 public account1Key;
     uint256 public account2Key;
     uint256 public account3Key;
-
-    // Generated agent wallets
-    address public agentWallet1;
-    address public agentWallet2;
-    address public agentWallet3;
-    uint256 public agentKey1;
-    uint256 public agentKey2;
-    uint256 public agentKey3;
-
-    Diamond public diamond;
-    PvPFacet public pvpFacet;
 
     function setUp() public {
         // Add debug logging
@@ -57,24 +43,6 @@ contract SetupGameTest is Script {
         account1 = vm.addr(account1Key);
         account2 = vm.addr(account2Key);
         account3 = vm.addr(account3Key);
-
-        // agentKey1 = vm.envUint("AGENT1_PRIVATE_KEY");
-        // agentKey2 = vm.envUint("AGENT2_PRIVATE_KEY");
-        // agentKey3 = vm.envUint("AGENT3_PRIVATE_KEY");
-
-        // console2.log("Agent keys loaded:");
-        // console2.log("Agent1 key present:", agentKey1 != 0);
-        // console2.log("Agent2 key present:", agentKey2 != 0);
-        // console2.log("Agent3 key present:", agentKey3 != 0);
-
-        // // Generate new agent wallet keys
-        // // agentKey1 = uint256(keccak256(abi.encodePacked("agent1")));
-        // // agentKey2 = uint256(keccak256(abi.encodePacked("agent2")));
-        // // agentKey3 = uint256(keccak256(abi.encodePacked("agent3")));
-
-        // agentWallet1 = vm.addr(0xa81946D14796875672FfC33381ad2be7D887D3EC);
-        // agentWallet2 = vm.addr(0x4ffE2DF7B11ea3f28c6a7C90b39F52427c9D550d);
-        // agentWallet3 = vm.addr(0x830598617569AfD7Ad16343f5D4a226578b16A3d);
     }
 
     function run() public {
@@ -102,84 +70,10 @@ contract SetupGameTest is Script {
         console2.log("Core owner:", core.owner());
         console2.log("Deployer address:", deployer);
 
-        // 2.5 Deploy Room implementation and set it in Core
+        // 2.5 Deploy Room implementation
         vm.broadcast(deployer);
         Room roomImplementation = new Room();
         console2.log("Room implementation deployed at:", address(roomImplementation));
-
-        // Deploy Diamond and PvP Facet before Room deployment
-        vm.startBroadcast(deployer);
-
-        // Deploy Diamond
-        diamond = new Diamond();
-        console2.log("Diamond deployed at:", address(diamond));
-
-        // Deploy PvP Facet
-        pvpFacet = new PvPFacet();
-        console2.log("PvP Facet deployed at:", address(pvpFacet));
-
-        // Get function selectors for PvP Facet
-        bytes4[] memory selectors = new bytes4[](11);
-        selectors[0] = PvPFacet.updateGlobalSupportedPvpActions.selector;
-        selectors[1] = PvPFacet.removeGlobalSupportedPvpActions.selector;
-        selectors[2] = PvPFacet.invokePvpAction.selector;
-        selectors[3] = PvPFacet.getSupportedPvpActionsForRound.selector;
-        selectors[4] = PvPFacet.getPvpStatuses.selector;
-        selectors[5] = PvPFacet.updateRoundState.selector;
-        selectors[6] = PvPFacet.updatePvpEnabled.selector;
-        selectors[7] = PvPFacet.setGlobalPvpEnabled.selector;
-        selectors[8] = PvPFacet.startRound.selector;
-        selectors[9] = PvPFacet.getCurrentRoundId.selector;
-        selectors[10] = PvPFacet.getRoundState.selector;
-
-        // Add PvP Facet to Diamond
-        diamond.addFacet(address(pvpFacet), selectors);
-        console2.log("PvP Facet added to Diamond");
-
-        // Initialize PvP settings
-        PvPFacet(address(diamond)).setGlobalPvpEnabled(true);
-
-        // Initialize some PvP actions
-        PvPFacet(address(diamond)).updateGlobalSupportedPvpActions(
-            "silence",
-            IPvP.PvpActionCategory.STATUS_EFFECT,
-            0, // fee
-            60 // duration in seconds
-        );
-
-        PvPFacet(address(diamond)).updateGlobalSupportedPvpActions(
-            "deafen",
-            IPvP.PvpActionCategory.STATUS_EFFECT,
-            0, // fee
-            60 // duration in seconds
-        );
-
-        PvPFacet(address(diamond)).updateGlobalSupportedPvpActions(
-            "poison",
-            IPvP.PvpActionCategory.STATUS_EFFECT,
-            0, // fee
-            60 // duration in seconds
-        );
-
-        PvPFacet(address(diamond)).updateGlobalSupportedPvpActions(
-            "attack",
-            IPvP.PvpActionCategory.DIRECT_ACTION,
-            0, // fee
-            0 // duration in seconds
-        );
-
-        PvPFacet(address(diamond)).updatePvpEnabled(0, true);
-
-        vm.stopBroadcast();
-
-        // Add diamond deployment here - wait for previous broadcast to complete
-        vm.startBroadcast(deployer); // Use startBroadcast instead of multiple broadcasts
-        // You'll need to deploy your diamond contract here
-        console2.log("Diamond deployed at:", address(diamond));
-
-        core.setRoomImplementation(address(roomImplementation));
-        console2.log("Room implementation set in Core");
-        vm.stopBroadcast(); // Stop the broadcast before starting new ones
 
         // 3. Get fees
         (uint256 roomFee, uint256 agentFee,,,) = core.getFees();
@@ -215,15 +109,12 @@ contract SetupGameTest is Script {
         // 7. Log generated agent wallet details
         console2.log("\nGenerated Agent Wallet 1:");
         console2.log("Address:", 0xa81946D14796875672FfC33381ad2be7D887D3EC);
-        // console2.log("Private Key:", agentKey1);
 
         console2.log("\nGenerated Agent Wallet 2:");
         console2.log("Address:", 0x4ffE2DF7B11ea3f28c6a7C90b39F52427c9D550d);
-        // console2.log("Private Key:", agentKey2);
 
         console2.log("\nGenerated Agent Wallet 3:");
         console2.log("Address:", 0x830598617569AfD7Ad16343f5D4a226578b16A3d);
-        // console2.log("Private Key:", agentKey3);
 
         console2.log("\nCore contract owner:", core.owner());
 
@@ -243,6 +134,18 @@ contract SetupGameTest is Script {
         agentWallets[1] = 0x4ffE2DF7B11ea3f28c6a7C90b39F52427c9D550d;
         agentWallets[2] = 0x830598617569AfD7Ad16343f5D4a226578b16A3d;
 
+        // Add fee recipient addresses (creators of the agents)
+        address[] memory feeRecipients = new address[](3);
+        feeRecipients[0] = account1; // Creator of agent 1
+        feeRecipients[1] = account2; // Creator of agent 2
+        feeRecipients[2] = account3; // Creator of agent 3
+
+        // Add agent IDs (same IDs used in registerAgentWallet)
+        uint256[] memory agentIds = new uint256[](3);
+        agentIds[0] = 1; // ID for agent 1
+        agentIds[1] = 2; // ID for agent 2
+        agentIds[2] = 3; // ID for agent 3
+
         console2.log("\nCreating room with the three agent wallets");
         vm.broadcast(deployer);
         address roomAddress = core.createRoom(
@@ -250,9 +153,47 @@ contract SetupGameTest is Script {
             account1, // creator
             address(usdc), // token address
             agentWallets,
-            address(diamond) // Use the deployed diamond address
+            feeRecipients,
+            agentIds,
+            address(roomImplementation) // Pass implementation directly
         );
 
         console2.log("\nRoom created at:", roomAddress);
+
+        // Initialize PvP actions directly on the Room contract
+        Room room = Room(payable(roomAddress));
+
+        vm.startBroadcast(deployer);
+
+        // Initialize PvP actions
+        room.updateSupportedPvpActions(
+            "silence",
+            Room.PvpActionCategory.STATUS_EFFECT,
+            0, // fee
+            60 // duration in seconds
+        );
+
+        room.updateSupportedPvpActions(
+            "deafen",
+            Room.PvpActionCategory.STATUS_EFFECT,
+            0, // fee
+            60 // duration in seconds
+        );
+
+        room.updateSupportedPvpActions(
+            "poison",
+            Room.PvpActionCategory.STATUS_EFFECT,
+            0, // fee
+            60 // duration in seconds
+        );
+
+        room.updateSupportedPvpActions(
+            "attack",
+            Room.PvpActionCategory.DIRECT_ACTION,
+            0, // fee
+            0 // duration in seconds
+        );
+
+        vm.stopBroadcast();
     }
 }

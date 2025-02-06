@@ -4,27 +4,17 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 import "./Core.sol";
-import "./interfaces/IPvP.sol";
-import "forge-std/console2.sol";
-import "./facets/PvPFacet.sol";
-
-interface IPvPFacet is IPvP {}
 
 contract Room is Ownable, ReentrancyGuard {
     error Room_RoundNotClosed(uint256 currentRoundId);
-    error Room_RoundActive(uint256 roundId);
-    error Room_RoundInactive(RoundState roundState);
-    error Room_AlreadyParticipant();
-    error Room_NotParticipant();
+    error Room_SenderAlreadyClaimedWinnings();
+    error Room_SenderHasNoBetInRound();
     error Room_AgentNotActive(address agent);
-    error Room_RoundNotActive(uint256 roundId);
     error Room_InvalidAmount();
     error Room_NoWinnings();
     error Room_InvalidBetType();
-    error Room_RoundNotProcessing();
+    error Room_RoundNotExpectedStatus(RoundState expected, RoundState actual);
     error Room_NotGameMaster();
     error Room_NotCreator();
     error Room_NotGameMasterOrCreator();
@@ -33,15 +23,16 @@ contract Room is Ownable, ReentrancyGuard {
     error Room_InvalidRoundDuration();
     error Room_InvalidPvpAction();
     error Room_InvalidFee();
-    error Room_InvalidDuration();
-    error Room_InsufficientBalance();
     error Room_TransferFailed();
-    error Room_InvalidAgents();
     error Room_NotAuthorized();
     error Room_StatusEffectAlreadyActive(string verb, address target, uint40 endTime);
     error Room__AlreadyInitialized();
+    error Room_ActionNotSupported();
+    error Room_AgentAlreadyDecided();
+    error Room_AgentNotExists(address agent);
 
     enum BetType {
+        NONE,
         BUY,
         HOLD,
         SELL,
@@ -54,8 +45,28 @@ contract Room is Ownable, ReentrancyGuard {
         CLOSED
     }
 
+    enum PvpActionCategory {
+        DIRECT_ACTION,
+        STATUS_EFFECT,
+        BUFF,
+        GAME_BREAKER
+    }
+
+    struct PvpAction {
+        string verb;
+        PvpActionCategory category;
+        uint256 fee;
+        uint32 duration;
+    }
+
+    struct PvpStatus {
+        string verb;
+        address instigator;
+        uint40 endTime;
+        bytes parameters;
+    }
+
     address payable public core;
-    IERC20 public USDC;
     RoomFees public fees;
     uint256 public feeBalance;
 
@@ -63,14 +74,14 @@ contract Room is Ownable, ReentrancyGuard {
     address public token;
     address public creator;
     uint256 public currentRoundId;
-    address[] public agents;
+    address[] public activeAgents;
+
     uint32 public maxAgents = 5;
     uint32 public currentAgentCount = 0;
-    uint256 public immutable USDC_DECIMALS = 6;
-    uint40 public roundDuration = 1 minutes;
-    // uint256 public PROCESSING_DURATION = 1 minutes;
+    // uint40 public roundDuration = 1 minutes;
+    uint40 public roundDuration = 10 seconds;
     uint256 public PROCESSING_DURATION = 1 seconds; //TODO Just for testing
-    bool public pvpEnabled = true;
+    bool public pvpEnabled;
 
     struct Round {
         RoundState state;
@@ -83,6 +94,7 @@ contract Room is Ownable, ReentrancyGuard {
         mapping(address => UserBet) bets;
         mapping(address => AgentPosition) agentPositions;
         mapping(address => bool) hasClaimedWinnings;
+        mapping(address => PvpStatus[]) pvpStatuses;
     }
 
     struct RoomFees {
@@ -103,24 +115,25 @@ contract Room is Ownable, ReentrancyGuard {
         bool hasDecided;
     }
 
+    struct RoomAgent {
+        address feeRecipient;
+        uint256 coreId;
+        bool active;
+    }
+
     mapping(uint256 => Round) public rounds; //roundid to struct
-    mapping(address => bool) public isAgent;
-    mapping(address => bool) public roomParticipants;
-    // Maps the agent address to the wallet address who should receive the agent's share of the fees. This is only expected to ever be the creator.
+    mapping(address => RoomAgent) public agentData;
     mapping(address => address) agentFeeRecipient;
+    mapping(string => PvpAction) public supportedPvpActions;
+    string[] public supportedPvpVerbs;
 
     event RoundStarted(uint256 indexed roundId, uint40 startTime, uint40 endTime);
     event JoinedRoom(address indexed user, uint256 indexed roundId);
-    event MessageInjected(address indexed user, uint256 indexed roundId);
-    event MutedForaMinute(address indexed user, uint256 indexed roundId, address indexed agent);
     event BetPlaced(
         address indexed user, uint256 indexed roundId, address indexed agent, BetType betType, uint256 amount
     );
     event FeesDistributed(uint256 indexed roundId);
     event WinningsClaimed(uint256 indexed roundId, address indexed user, uint256 winnings);
-    event BetUpdated(
-        uint256 indexed roundId, address indexed user, address agent, BetType newbetType, uint256 newamount
-    );
     event RoundStateUpdated(uint256 indexed currentRoundId, RoundState state);
     event AgentDecisionSubmitted(uint256 indexed roundId, address agent, BetType betType);
     event MarketResolved(uint256 indexed roundId);
@@ -128,6 +141,11 @@ contract Room is Ownable, ReentrancyGuard {
     event RoundDurationUpdated(uint40 oldDuration, uint40 newDuration);
     event AgentAdded(address indexed agent);
     event AgentRemoved(address indexed agent);
+    event PvpActionsUpdated(
+        string indexed verb, PvpActionCategory indexed category, uint256 fee, uint32 duration, bool isNew, bool isUpdate
+    );
+    event PvpActionRemoved(string indexed verb);
+    event PvpActionInvoked(string indexed verb, address indexed target, uint40 endTime, bytes parameters);
 
     modifier onlyGameMaster() {
         if (msg.sender != gameMaster) revert Room_NotGameMaster();
@@ -151,8 +169,6 @@ contract Room is Ownable, ReentrancyGuard {
         _;
     }
 
-    address public diamond;
-
     constructor() Ownable(msg.sender) {
         // No initialization needed here since this is just the implementation
     }
@@ -162,14 +178,12 @@ contract Room is Ownable, ReentrancyGuard {
         address _token,
         address _creator,
         address _core,
-        address _usdc,
         uint256 _roomEntryFee,
         address[] memory _initialAgents,
-        address _diamond
+        address[] memory _initialAgentFeeRecipients,
+        uint256[] memory _initialAgentIds
     ) external {
-        console2.log("Initializing Room");
         if (initialized) {
-            console2.log("Room already initialized");
             revert Room__AlreadyInitialized();
         }
 
@@ -177,38 +191,41 @@ contract Room is Ownable, ReentrancyGuard {
         token = _token;
         creator = _creator;
         core = payable(_core);
-        USDC = IERC20(_usdc);
         fees = RoomFees({roomEntryFee: _roomEntryFee});
+        pvpEnabled = true;
         for (uint256 i; i < _initialAgents.length; i++) {
-            isAgent[_initialAgents[i]] = true;
+            agentData[_initialAgents[i]] =
+                RoomAgent({feeRecipient: _initialAgentFeeRecipients[i], coreId: _initialAgentIds[i], active: true});
             currentAgentCount++;
         }
 
         initialized = true;
-        diamond = _diamond;
 
-        // Initialize the first round's PvP storage
+        // Initialize the first round
         Round storage round = rounds[currentRoundId];
         round.state = RoundState.ACTIVE;
-
-        // Initialize PvP Facet's storage for this round
-        PvPFacet(diamond).updateRoundState(currentRoundId, uint8(RoundState.ACTIVE));
     }
 
-    // Will worry about colledting the fee for the agent creator later, let's just get something functional for now
     function addAgent(address agent) public onlyGameMasterOrCreator {
-        if (currentAgentCount >= maxAgents) revert Room_MaxAgentsReached();
-        if (isAgent[agent]) revert Room_AgentAlreadyExists();
-        isAgent[agent] = true;
-        agents.push(agent);
-        currentAgentCount++;
+        if (activeAgents.length >= maxAgents) revert Room_MaxAgentsReached();
+        if (agentData[agent].feeRecipient != address(0)) revert Room_AgentAlreadyExists();
+        activeAgents.push(agent);
         emit AgentAdded(agent);
     }
 
     function removeAgent(address agent) public onlyGameMasterOrCreator {
-        if (!isAgent[agent]) revert Room_AgentNotActive(agent);
-        isAgent[agent] = false;
-        currentAgentCount--;
+        if (agentData[agent].feeRecipient == address(0)) revert Room_AgentNotExists(agent);
+        agentData[agent].active = false;
+        bool found = false;
+        for (uint256 i; i < activeAgents.length; i++) {
+            if (activeAgents[i] == agent) {
+                activeAgents[i] = activeAgents[activeAgents.length - 1];
+                activeAgents.pop();
+                found = true;
+                break;
+            }
+        }
+        if (!found) revert Room_AgentNotExists(agent);
         emit AgentRemoved(agent);
     }
 
@@ -224,36 +241,53 @@ contract Room is Ownable, ReentrancyGuard {
         emit RoundDurationUpdated(oldDuration, newDuration);
     }
 
-    function joinRoom() public nonReentrant {
-        Round storage round = rounds[currentRoundId];
-        if (round.state != RoundState.ACTIVE) revert Room_RoundInactive(round.state);
-        if (roomParticipants[msg.sender]) revert Room_AlreadyParticipant();
-        uint256 amount = fees.roomEntryFee;
-        USDC.transferFrom(msg.sender, address(this), amount);
-        roomParticipants[msg.sender] = true;
-        round.totalFees += amount;
-        emit JoinedRoom(msg.sender, currentRoundId);
-    }
-
-    function placeBet(address agent, BetType betType, uint256 amount) public nonReentrant {
-        if (betType == BetType.KICK) {
+    function placeBet(address agent, BetType betType, uint256 amount) public payable nonReentrant {
+        if (betType == BetType.KICK || betType == BetType.NONE) {
             revert Room_InvalidBetType();
         }
 
         Round storage round = rounds[currentRoundId];
         if (round.state != RoundState.ACTIVE) {
-            revert Room_RoundInactive(round.state);
+            revert Room_RoundNotExpectedStatus(RoundState.ACTIVE, round.state);
         }
-        if (!isAgent[agent]) {
+        if (agentData[agent].feeRecipient == address(0)) {
             revert Room_AgentNotActive(agent);
         }
         if (amount <= 0) {
             revert Room_InvalidAmount();
         }
+
         UserBet storage userBet = round.bets[msg.sender];
         AgentPosition storage position = round.agentPositions[agent];
 
-        USDC.transferFrom(msg.sender, address(this), amount);
+        // Handle existing bet if there is one
+        if (userBet.amount > 0) {
+            // Remove old bet amounts from pools
+            if (userBet.bettype == BetType.BUY) {
+                position.buyPool -= userBet.amount;
+            } else if (userBet.bettype == BetType.HOLD) {
+                position.hold -= userBet.amount;
+            } else if (userBet.bettype == BetType.SELL) {
+                position.sell -= userBet.amount;
+            }
+
+            // Handle refund if new bet is smaller
+            if (amount < userBet.amount) {
+                uint256 refundAmount = userBet.amount - amount;
+                (bool success,) = payable(msg.sender).call{value: refundAmount}("");
+                if (!success) revert Room_TransferFailed();
+            }
+
+            // Verify additional payment if new bet is larger
+            if (amount > userBet.amount) {
+                if (msg.value != (amount - userBet.amount)) revert Room_InvalidAmount();
+            }
+        } else {
+            // New bet
+            if (msg.value != amount) revert Room_InvalidAmount();
+        }
+
+        // Update pools with new bet
         if (betType == BetType.BUY) {
             position.buyPool += amount;
         } else if (betType == BetType.HOLD) {
@@ -268,42 +302,17 @@ contract Room is Ownable, ReentrancyGuard {
         emit BetPlaced(msg.sender, currentRoundId, agent, betType, amount);
     }
 
-    function updateBet(address agent, BetType newBetType, uint256 newAmount) external nonReentrant {
-        Round storage round = rounds[currentRoundId];
-        if (round.state != RoundState.ACTIVE) revert Room_RoundInactive(round.state);
-        if (newAmount == 0) revert Room_InvalidAmount();
-
-        UserBet storage userBet = round.bets[msg.sender];
-        AgentPosition storage position = round.agentPositions[agent];
-
-        if (userBet.bettype == BetType.BUY) {
-            position.buyPool -= userBet.amount;
-        } else {
-            position.hold -= userBet.amount;
-        }
-
-        if (newAmount > userBet.amount) {
-            uint256 additionalAmount = newAmount - userBet.amount;
-            USDC.transferFrom(msg.sender, address(this), additionalAmount);
-        } else if (newAmount < userBet.amount - newAmount) {
-            uint256 refundAmount = userBet.amount - newAmount;
-            USDC.transfer(msg.sender, refundAmount);
-        }
-        userBet.bettype = newBetType;
-        userBet.amount = newAmount;
-        emit BetUpdated(currentRoundId, msg.sender, agent, newBetType, newAmount);
-    }
-
     function claimWinnings(uint256 roundId) public nonReentrant {
         Round storage round = rounds[roundId];
-        if (round.state != RoundState.CLOSED) revert Room_RoundNotActive(roundId);
-        if (!roomParticipants[msg.sender]) revert Room_NotParticipant();
-        if (round.hasClaimedWinnings[msg.sender]) revert Room_AlreadyParticipant();
+        if (round.state != RoundState.CLOSED) revert Room_RoundNotClosed(roundId);
+        if (round.bets[msg.sender].bettype == BetType.NONE) revert Room_SenderHasNoBetInRound();
+        if (round.hasClaimedWinnings[msg.sender]) revert Room_SenderAlreadyClaimedWinnings();
         uint256 winnings = calculateWinnings(roundId, msg.sender);
         if (winnings == 0) revert Room_NoWinnings();
 
         round.hasClaimedWinnings[msg.sender] = true;
-        USDC.transfer(msg.sender, winnings);
+        (bool success,) = payable(msg.sender).call{value: winnings}("");
+        if (!success) revert Room_TransferFailed();
         emit WinningsClaimed(roundId, msg.sender, winnings);
     }
 
@@ -312,7 +321,7 @@ contract Room is Ownable, ReentrancyGuard {
         uint256 totalWinnings = 0;
 
         for (uint256 i; i < maxAgents; i++) {
-            address agent = agents[i];
+            address agent = activeAgents[i];
             AgentPosition storage position = round.agentPositions[agent];
 
             UserBet storage userBet = round.bets[user];
@@ -341,7 +350,7 @@ contract Room is Ownable, ReentrancyGuard {
 
     function startRound() public onlyGameMaster {
         if (rounds[currentRoundId].state != RoundState.INACTIVE && rounds[currentRoundId].state != RoundState.CLOSED) {
-            revert Room_RoundNotClosed(currentRoundId);
+            revert Room_RoundNotExpectedStatus(RoundState.INACTIVE, rounds[currentRoundId].state);
         }
 
         currentRoundId++;
@@ -350,84 +359,58 @@ contract Room is Ownable, ReentrancyGuard {
         round.endTime = uint40(block.timestamp + roundDuration);
         round.state = RoundState.ACTIVE;
 
-        // Update PvP Facet's storage
-        PvPFacet(diamond).updateRoundState(currentRoundId, uint8(RoundState.ACTIVE));
-        PvPFacet(diamond).startRound(currentRoundId);
-
         emit RoundStarted(currentRoundId, round.startTime, round.endTime);
     }
 
-    function submitAgentDecision(address agent, BetType decision) public {
+    function submitAgentDecision(address agent, BetType decision) public onlyGameMaster {
         // Only game master or agent can call this function
-        if (msg.sender != gameMaster && !isAgent[msg.sender]) revert Room_NotAuthorized();
+        if (decision == BetType.NONE) revert Room_InvalidBetType();
+        if (msg.sender != gameMaster) revert Room_NotAuthorized();
 
         // Only game master can submit the "KICK" decision
-        if (decision == BetType.KICK && msg.sender != gameMaster) revert Room_NotGameMaster();
+        if (decision == BetType.KICK /*&& msg.sender != gameMaster*/ ) revert Room_NotGameMaster();
 
-        if (!isAgent[agent]) revert Room_AgentNotActive(agent);
         Round storage round = rounds[currentRoundId];
-        if (round.state != RoundState.PROCESSING) revert Room_RoundNotProcessing();
+        // if (round.state != RoundState.PROCESSING) {
+        //     revert Room_RoundNotExpectedStatus(RoundState.PROCESSING, round.state);
+        // }
         AgentPosition storage position = round.agentPositions[agent];
-        if (position.hasDecided) revert Room_AlreadyParticipant();
+        if (position.hasDecided) revert Room_AgentAlreadyDecided();
         position.decision = decision;
         position.hasDecided = true;
         emit AgentDecisionSubmitted(currentRoundId, agent, decision);
     }
 
-    function refundBets(uint256 roundId, address agent) internal {
-        Round storage round = rounds[roundId];
-        AgentPosition storage position = round.agentPositions[agent];
-        if (!position.hasDecided) {
-            for (uint256 i; i < maxAgents; i++) {
-                address user = agents[i];
-                UserBet storage userBet = round.bets[user];
-                if (userBet.bettype == BetType.BUY) {
-                    USDC.transfer(user, userBet.amount);
-                } else {
-                    USDC.transfer(user, userBet.amount);
-                }
-            }
-        }
-    }
+    //TODO This function is broken,we should be refunding the user bets, the user is not an agent
+    // function refundBets(uint256 roundId, address agent) internal {
+    //     Round storage round = rounds[roundId];
+    //     AgentPosition storage position = round.agentPositions[agent];
+    //     if (!position.hasDecided) {
+    //         for (uint256 i; i < activeAgents.length; i++) {
+    //             address user = activeAgents[i];
+    //             UserBet storage userBet = round.bets[user];
+    //             if (userBet.bettype == BetType.BUY) {
+    //                 (bool success,) = payable(user).call{value: userBet.amount}("");
+    //                 if (!success) revert Room_TransferFailed();
+    //             } else {
+    //                 (bool success,) = payable(user).call{value: userBet.amount}("");
+    //                 if (!success) revert Room_TransferFailed();
+    //             }
+    //         }
+    //     }
+    // }
 
     function resolveMarket() public {
         Round storage round = rounds[currentRoundId];
         _distributeFees(currentRoundId);
         round.state = RoundState.CLOSED;
-        // Update PvP Facet's storage
-        try PvPFacet(diamond).updateRoundState(currentRoundId, uint8(RoundState.CLOSED)) {}
-        catch {
-            console2.log("Failed to update PvP Facet round state");
-        }
         emit MarketResolved(currentRoundId);
     }
 
-    function checkUpKeep(bytes calldata) external view returns (bool upkeepNeeded, bytes memory) {
-        //ask team if frontend can. chainlink means, creating subscription + link for every room contract
+    function setCurrentRoundState(RoundState newState) external onlyGameMaster {
         Round storage round = rounds[currentRoundId];
-        if (round.state == RoundState.ACTIVE && block.timestamp >= round.endTime) {
-            return (true, "");
-        }
-        if (round.state == RoundState.PROCESSING && block.timestamp >= round.endTime + PROCESSING_DURATION) {
-            return (true, "");
-        }
-        return (false, "");
-    }
-
-    function performUpKeep(bytes calldata) external onlyGameMaster {
-        Round storage round = rounds[currentRoundId];
-
-        if (round.state == RoundState.ACTIVE && block.timestamp >= round.endTime) {
-            round.state = RoundState.PROCESSING;
-            // Update PvP Facet's storage
-            try PvPFacet(diamond).updateRoundState(currentRoundId, uint8(RoundState.PROCESSING)) {}
-            catch {
-                console2.log("Failed to update PvP Facet round state");
-            }
-            emit RoundStateUpdated(currentRoundId, RoundState.PROCESSING);
-        } else if (round.state == RoundState.PROCESSING && block.timestamp >= round.endTime + PROCESSING_DURATION) {
-            resolveMarket();
-        }
+        round.state = newState;
+        emit RoundStateUpdated(currentRoundId, newState);
     }
 
     function _distributeFees(uint256 roundId) internal {
@@ -441,19 +424,16 @@ contract Room is Ownable, ReentrancyGuard {
         uint256 roomCreatorCut = (totalFees * roomCreatorPercent) / basisPoint;
         uint256 agentCreatorCut = (totalFees * agentCreatorPercent) / basisPoint;
 
-        USDC.transfer(creator, roomCreatorCut);
+        (bool success1,) = payable(creator).call{value: roomCreatorCut}("");
+        if (!success1) revert Room_TransferFailed();
 
         uint256 agentCreatorShare = agentCreatorCut / 5;
 
-        //TODO Only commented this out to not have to deal with type error
-        // for (uint256 i; i < maxAgents; i++) {
-        //     (address agentcreator,) = core.getAgent(agents[i]);
-        //     USDC.transfer(agentcreator, agentCreatorShare);
-        // }
         uint256 totalDistributed = roomCreatorCut + (agentCreatorShare * 5);
         uint256 dust = totalFees - totalDistributed - daoPercent;
         address dao = Core(payable(core)).dao();
-        USDC.transfer(dao, daoPercent + dust);
+        (bool success2,) = payable(dao).call{value: daoPercent + dust}("");
+        if (!success2) revert Room_TransferFailed();
 
         emit FeesDistributed(roundId);
     }
@@ -482,24 +462,90 @@ contract Room is Ownable, ReentrancyGuard {
         return rounds[roundId].agentPositions[agent];
     }
 
-    // function checkIsAgent(address agent) public view returns (bool) {
-    //     return isAgent[agent];
-    // }
-
-    function checkRoomParticipant(address participant) public view returns (bool) {
-        return roomParticipants[participant];
-    }
-
     function getHasClaimedWinnings(uint256 roundId, address user) public view returns (bool) {
         return rounds[roundId].hasClaimedWinnings[user];
     }
 
-    function invokePvpAction(address target, string memory verb, bytes memory parameters) public {
-        console2.log("(Room) Invoking PvP action", verb, "on ", target);
-        IPvPFacet(diamond).invokePvpAction(target, verb, parameters);
+    function updateSupportedPvpActions(string memory verb, PvpActionCategory category, uint256 fee, uint32 duration)
+        external
+        onlyGameMasterOrCreator
+    {
+        bool newAction = keccak256(abi.encodePacked(supportedPvpActions[verb].verb)) == keccak256(abi.encodePacked(""));
+
+        supportedPvpActions[verb] = PvpAction({verb: verb, category: category, fee: fee, duration: duration});
+
+        if (newAction) {
+            supportedPvpVerbs.push(verb);
+        }
+
+        emit PvpActionsUpdated(verb, category, fee, duration, newAction, !newAction);
     }
 
-    function getPvpStatuses(uint256 roundId, address agent) public view returns (IPvP.PvpStatus[] memory) {
-        return IPvPFacet(diamond).getPvpStatuses(roundId, agent);
+    // TODO Commented to shave space
+    // function removeSupportedPvpActions(string memory verb) external onlyGameMasterOrCreator {
+    //     delete supportedPvpActions[verb];
+
+    //     for (uint256 i = 0; i < supportedPvpVerbs.length; i++) {
+    //         if (keccak256(abi.encodePacked(supportedPvpVerbs[i])) == keccak256(abi.encodePacked(verb))) {
+    //             supportedPvpVerbs[i] = supportedPvpVerbs[supportedPvpVerbs.length - 1];
+    //             supportedPvpVerbs.pop();
+    //             break;
+    //         }
+    //     }
+
+    //     emit PvpActionRemoved(verb);
+    // }
+
+    function invokePvpAction(address target, string memory verb, bytes memory parameters) public payable {
+        if (parameters.length > 256) {
+            revert Room_InvalidPvpAction();
+        }
+
+        Round storage round = rounds[currentRoundId];
+        if (round.state != RoundState.ACTIVE) revert Room_RoundNotExpectedStatus(RoundState.ACTIVE, round.state);
+        if (!pvpEnabled) {
+            console2.log("PvP is disabled", pvpEnabled);
+            revert Room_ActionNotSupported();
+        }
+        PvpAction memory action = supportedPvpActions[verb];
+        if (keccak256(abi.encodePacked(action.verb)) == keccak256(abi.encodePacked(""))) {
+            revert Room_InvalidPvpAction();
+        }
+
+        if (msg.value != action.fee) revert Room_InvalidAmount();
+
+        PvpStatus[] storage targetStatuses = round.pvpStatuses[target];
+        bool statusFound = false;
+        uint256 expiredStatusIndex;
+
+        for (uint256 i = 0; i < targetStatuses.length; i++) {
+            if (keccak256(abi.encodePacked(targetStatuses[i].verb)) == keccak256(abi.encodePacked(verb))) {
+                statusFound = true;
+                if (targetStatuses[i].endTime > uint40(block.timestamp)) {
+                    revert Room_StatusEffectAlreadyActive(verb, target, targetStatuses[i].endTime);
+                }
+                expiredStatusIndex = i;
+                break;
+            }
+        }
+
+        uint40 endTime = uint40(block.timestamp + action.duration);
+
+        if (statusFound) {
+            targetStatuses[expiredStatusIndex] =
+                PvpStatus({verb: verb, instigator: msg.sender, endTime: endTime, parameters: parameters});
+        } else {
+            targetStatuses.push(
+                PvpStatus({verb: verb, instigator: msg.sender, endTime: endTime, parameters: parameters})
+            );
+        }
+
+        emit PvpActionInvoked(verb, target, endTime, parameters);
     }
+
+    function getPvpStatuses(uint256 roundId, address agent) public view returns (PvpStatus[] memory) {
+        return rounds[roundId].pvpStatuses[agent];
+    }
+
+    receive() external payable {}
 }

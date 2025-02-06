@@ -36,17 +36,9 @@ interface IPvP {
         uint32 duration
     ) external;
     function removeGlobalSupportedPvpActions(string memory verb) external;
-    function getSupportedPvpActionsForRound(uint256 roundId) external view returns (PvpAction[] memory);
     function getRoundState(uint256 roundId)
         external
         view
-        returns (
-            uint8 state,
-            uint40 startTime,
-            uint40 endTime,
-            bool pvpEnabled,
-            uint256 numSupportedActions,
-            uint256 numActiveStatuses
-        );
+        returns (uint8 state, uint40 startTime, uint40 endTime, uint256 numSupportedActions, uint256 numActiveStatuses);
     function getCurrentRoundId() external view returns (uint256);
 }

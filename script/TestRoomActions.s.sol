@@ -3,7 +3,6 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
 import "../src/Room.sol";
-import "../src/interfaces/IPvP.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "forge-std/console2.sol";
 
@@ -11,25 +10,22 @@ contract TestRoomActions is Script {
     // Constants for target addresses
     address constant TARGET_1 = 0x4ffE2DF7B11ea3f28c6a7C90b39F52427c9D550d;
     address constant TARGET_2 = 0x830598617569AfD7Ad16343f5D4a226578b16A3d;
-    address constant ROOM_ADDRESS = 0x4fC59812f1AA8A00B61D2B1F378096C3bf9880d3;
+    address constant ROOM_ADDRESS = 0x86C1cB7A73B89300D7Fa8CCeFD177Ef7f886330b;
 
     function run() external {
         // Load private key and start broadcasting
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        // Get the room address from environment
-        // address roomAddress = vm.envAddress("ROOM_ADDRESS");
-        // Room room = Room(roomAddress);
-        Room room = Room(ROOM_ADDRESS);
-        IERC20 usdc = IERC20(room.USDC());
+        Room room = Room(payable(ROOM_ADDRESS));
+        IERC20 usdc = IERC20(room.token());
 
-        // room.performUpKeep("");
-        console2.log("Round state:", ROOM_ADDRESS);
-            room.startRound();
+        console2.log("Room state:", uint8(room.getRoundState(room.currentRoundId())));
+        room.startRound();
 
         if (room.getRoundState(room.currentRoundId()) == Room.RoundState.INACTIVE) {
             console2.log("Round is inactive, starting round");
+            room.startRound();
         }
 
         if (room.getRoundState(room.currentRoundId()) == Room.RoundState.CLOSED) {
@@ -45,11 +41,13 @@ contract TestRoomActions is Script {
         address[] memory testAgents = new address[](2);
         testAgents[0] = TARGET_1;
         testAgents[1] = TARGET_2;
-        // testAgents[2] = 0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db; // Add another test address
 
         address firstAgent;
         for (uint256 i = 0; i < testAgents.length; i++) {
-            bool isAgentActive = room.isAgent(testAgents[i]);
+            // Check if agent exists in agentData mapping
+            (address feeRecipient,,) = room.agentData(testAgents[i]);
+            bool isAgentActive = feeRecipient != address(0);
+
             console2.log("Testing address:", testAgents[i]);
             console2.log("Is active agent:", isAgentActive);
 
@@ -65,30 +63,19 @@ contract TestRoomActions is Script {
             return;
         }
 
-        // Rest of the code using firstAgent
-        uint256 betAmount = 100 * 10 ** 6; // 100 USDC
-        usdc.approve(address(room), betAmount);
-
+        // Place bet
+        uint256 betAmount = 0.1 ether;
         console2.log("Placing bet on agent:", firstAgent);
-        room.placeBet(firstAgent, Room.BetType.BUY, betAmount);
+        room.placeBet{value: betAmount}(firstAgent, Room.BetType.BUY, betAmount);
         console2.log("Initial bet placed");
 
-        // 3. Update bet
-        uint256 newBetAmount = 150 * 10 ** 6; // 150 USDC
-        usdc.approve(address(room), newBetAmount - betAmount);
-        room.updateBet(firstAgent, Room.BetType.HOLD, newBetAmount);
-        console2.log("Bet updated");
+        // Dump PvP state before actions
+        console2.log("\n=== PvP State Before Actions ===");
+        dumpPvPState(room, room.currentRoundId());
 
-        // Add debug logs
-        console2.log("Diamond address:", room.diamond());
-
-        // Dump PvP state before starting round
-        console2.log("\n=== PvP State Before Round Start ===");
-        dumpPvPState(IPvPFacet(room.diamond()), room.currentRoundId());
-
-        // Original PvP action calls with try-catch
+        // Try PvP actions
         console2.log("\nInvoking PvP actions");
-        try room.invokePvpAction(TARGET_1, "silence", "") {
+        try room.invokePvpAction{value: 0}(TARGET_1, "silence", "") {
             console2.log("Silence action succeeded");
         } catch Error(string memory reason) {
             console2.log("Error invoking silence:", reason);
@@ -98,67 +85,54 @@ contract TestRoomActions is Script {
 
         // Dump PvP state after action
         console2.log("\n=== PvP State After Action ===");
-        dumpPvPState(IPvPFacet(room.diamond()), room.currentRoundId());
+        dumpPvPState(room, room.currentRoundId());
 
         console2.log("Invoking deafen action on ", TARGET_2);
-        room.invokePvpAction(TARGET_2, "deafen", "");
+        room.invokePvpAction{value: 0}(TARGET_2, "deafen", "");
+
         bytes memory poisonParams = bytes('{"find": "nice", "replace": "terrible", "caseSensitive": false}');
         console2.log("Invoking poison action on ", TARGET_1);
-        room.invokePvpAction(TARGET_1, "poison", poisonParams);
+        room.invokePvpAction{value: 0}(TARGET_1, "poison", poisonParams);
 
         console2.log("Actions completed");
         vm.stopBroadcast();
     }
 
-    function dumpPvPState(IPvPFacet pvp, uint256 roundId) internal view {
-        console2.log("\n=== Global PvP State ===");
-        try pvp.getGlobalSupportedPvpActions() returns (IPvP.PvpAction[] memory actions) {
-            console2.log("Number of global supported PvP actions:", actions.length);
-            for (uint256 i = 0; i < actions.length; i++) {
-                console2.log("Global action", i, ":");
-                console2.log("  Verb:", actions[i].verb);
-                console2.log("  Category:", uint256(actions[i].category));
-                console2.log("  Fee:", actions[i].fee);
-                console2.log("  Duration:", actions[i].duration);
-            }
-        } catch Error(string memory reason) {
-            console2.log("Error getting global actions:", reason);
-        } catch {
-            console2.log("Unknown error getting global actions");
+    function dumpPvPState(Room room, uint256 roundId) internal view {
+        console2.log("\n=== Supported PvP Actions ===");
+        string[] memory verbs = new string[](4);
+        verbs[0] = "silence";
+        verbs[1] = "deafen";
+        verbs[2] = "poison";
+        verbs[3] = "attack";
+
+        console2.log("Number of supported PvP actions:", verbs.length);
+
+        for (uint256 i = 0; i < verbs.length; i++) {
+            (string memory actionVerb, Room.PvpActionCategory category, uint256 fee, uint32 duration) =
+                room.supportedPvpActions(verbs[i]);
+
+            console2.log("Action", i, ":");
+            console2.log("  Verb:", actionVerb);
+            console2.log("  Category:", uint256(category));
+            console2.log("  Fee:", fee);
+            console2.log("  Duration:", duration);
         }
 
         console2.log("\n=== Round State ===");
-        try pvp.getRoundState(roundId) returns (
-            uint8 state,
-            uint40 startTime,
-            uint40 endTime,
-            bool pvpEnabled,
-            uint256 numSupportedActions,
-            uint256 numActiveStatuses
-        ) {
-            console2.log("Round ID:", roundId);
-            console2.log("State:", state);
-            console2.log("Start time:", startTime);
-            console2.log("End time:", endTime);
-            console2.log("PvP enabled:", pvpEnabled);
-            console2.log("Number of supported actions:", numSupportedActions);
-            console2.log("Number of active statuses:", numActiveStatuses);
-        } catch {
-            console2.log("Error getting round state");
-        }
+        console2.log("Round ID:", roundId);
+        console2.log("State:", uint8(room.getRoundState(roundId)));
+        console2.log("Start time:", room.getRoundStartTime(roundId));
+        console2.log("End time:", room.getRoundEndTime(roundId));
 
-        console2.log("\n=== Round PvP Actions ===");
-        try pvp.getSupportedPvpActionsForRound(roundId) returns (IPvP.PvpAction[] memory actions) {
-            console2.log("Number of round-specific PvP actions:", actions.length);
-            for (uint256 i = 0; i < actions.length; i++) {
-                console2.log("Round action", i, ":");
-                console2.log("  Verb:", actions[i].verb);
-                console2.log("  Category:", uint256(actions[i].category));
-                console2.log("  Fee:", actions[i].fee);
-                console2.log("  Duration:", actions[i].duration);
-            }
-        } catch {
-            console2.log("Error getting round actions");
+        console2.log("\n=== PvP Statuses ===");
+        Room.PvpStatus[] memory statuses = room.getPvpStatuses(roundId, TARGET_1);
+        console2.log("Number of PvP statuses for TARGET_1:", statuses.length);
+        for (uint256 i = 0; i < statuses.length; i++) {
+            console2.log("Status", i, ":");
+            console2.log("  Verb:", statuses[i].verb);
+            console2.log("  Instigator:", statuses[i].instigator);
+            console2.log("  End time:", statuses[i].endTime);
         }
     }
 }
