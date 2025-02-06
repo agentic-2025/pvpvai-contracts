@@ -1,27 +1,32 @@
 //SPDX-License-Identifier : MIT
 
-pragma solidity 0.8.20;
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "./Room.sol";
-
+import "@openzeppelin/contracts/proxy/Clones.sol";
+import "./interfaces/IRoom.sol";
 // Core contract managing agent creation, permissions, fees, and registry
 
-contract Core is Ownable {
+contract Core is Ownable, ReentrancyGuard {
     error Core__FeeZero();
     error Core__InvalidCutPoints();
     error Core__InvalidCutRate();
     error Core__InvalidCreator();
     error Core__IncorrectAgentCreationFee();
     error Core__IncorrectRoomCreationFee();
-    error Core__AgentAlreadyExists();
+    error Core__AgentAlreadyExists(uint256 agentId);
     error Core__InsufficientBalance();
     error Core__UnauthorizedAccessofAgent();
     error Core__UnauthorizedAccessofRoom();
-    error Core__AgentNotActive(address agent);
-    error Core__AgentDoesNotExist(address agent);
+    error Core__AgentNotActive(uint256 agentId);
+    error Core__AgentDoesNotExist(uint256 agentId);
     error Core__InvalidRoomAgents();
+    error Core__CreateRoomUnathorized();
+    error Core__CreateRoomInvalidToken();
+    error Core__AgentAltWalletAlreadyExists();
+    error Core__AgentWalletNotFound(address queriedWallet);
+    error Core__RoomImplementationNotSet();
 
     struct FeeStructure {
         uint256 agentCreationFee;
@@ -32,24 +37,32 @@ contract Core is Ownable {
     }
 
     struct Agent {
-        address Creator;
+        address creator;
         bool isActive;
+        address[] wallets; //convenience field
+        address[] rooms; //convenience field
     }
 
     struct RoomStructure {
         address token;
         address creator;
-        bool isActive;
+        bool isActive; // When true,
     }
 
     address public dao;
+    uint32 public maxAgentsPerRoom = 5;
     uint256 public constant MAX_FEE_RATE = 1000;
     uint256 public constant BASIS_POINTS = 1000;
     FeeStructure public fees;
     mapping(address => RoomStructure) public rooms;
-    mapping(address => Agent) public agents;
-    mapping(address => uint256) public Balances; //useraddress -> balance
+    mapping(uint256 => Agent) public agents;
+    mapping(address => uint256) public agentWallets;
+    mapping(address => uint256) public balances; //useraddress -> balance, updated when we distribute fees
+
+    // Alternate wallets for the agent to sandbox spending in trading rooms, input address is the alt, what you receive is the agent wallet
     address public immutable USDC;
+
+    address public roomImplementation;
 
     event FeesSet(
         uint256 indexed roomCreationFee,
@@ -58,18 +71,20 @@ contract Core is Ownable {
         uint256 agentCreatorCut,
         uint256 daoCut
     ); //can it be tracked without indexed?
-    event AgentUpdated(address indexed agentAddress, address indexed creator, bool indexed isActive);
     event RoomCreated(address indexed roomAddress, address indexed creator);
-    event AgentCreated(address indexed agentAddress, address indexed creator);
-    event BalanceWithdrawn(address indexed user, uint256 indexed amount);
     event RoomUpdated(address indexed roomAddress, address indexed creator, bool indexed isActive);
+    event AgentCreated(uint256 indexed agentId, address indexed creator);
+    event AgentUpdated(uint256 indexed agentId, address indexed creator, bool isActive);
+    event AgentWalletsUpdated(uint256 indexed agentId, address indexed newWallet);
+    event BalanceWithdrawn(address indexed user, uint256 indexed amount);
+    event BalanceDeposited(address indexed user, uint256 indexed amount);
 
     constructor(address usdc) Ownable(msg.sender) {
         //owner is admin of dao
         USDC = usdc;
         fees = FeeStructure({
-            agentCreationFee: 0.001 ether,
-            roomCreationFee: 0.005 ether,
+            agentCreationFee: 0.002 ether,
+            roomCreationFee: 0.001 ether,
             roomCreatorCut: 1000,
             agentCreatorCut: 200,
             daoCut: 200 //platform fee/ dao fee
@@ -80,24 +95,37 @@ contract Core is Ownable {
     fallback() external {}
 
     //agent functions
-    function createAgent(address agentAddress) external payable {
+    function createAgent(address creator, uint256 agentId) external payable onlyOwner {
+        // Check that the creator has enough balance to cover the agent creation fee
+        if (balances[creator] < fees.agentCreationFee) {
+            revert Core__InsufficientBalance();
+        }
         if (msg.value != fees.agentCreationFee) {
             revert Core__IncorrectAgentCreationFee();
         }
-        agents[agentAddress] = Agent({Creator: msg.sender, isActive: true});
+
+        // Check that the agentId is not already in use
+        if (agents[agentId].creator != address(0)) {
+            revert Core__AgentAlreadyExists(agentId);
+        }
+
+        // Create the agent
+        agents[agentId] =
+            Agent({creator: msg.sender, isActive: true, wallets: new address[](0), rooms: new address[](0)});
+        // Decrement the creator's balance by the agent creation fee and add fee to dao balance
+        balances[creator] -= fees.agentCreationFee;
         _distributeFees(fees.agentCreationFee);
 
-        emit AgentCreated(agentAddress, msg.sender);
+        emit AgentCreated(agentId, msg.sender);
     }
 
-    function UpdateAgent(address agentAddress, bool isactive, address creator) external {
-        if (agents[agentAddress].Creator != msg.sender) {
+    function UpdateAgent(uint256 agentId, bool isactive) external {
+        if (agents[agentId].creator != msg.sender && msg.sender != owner()) {
             revert Core__UnauthorizedAccessofAgent();
         } //check agent address? //can owner change agent status
-        agents[agentAddress].isActive = isactive;
-        agents[agentAddress].Creator = creator;
+        agents[agentId].isActive = isactive;
 
-        emit AgentUpdated(agentAddress, creator, isactive);
+        emit AgentUpdated(agentId, msg.sender, isactive);
     }
 
     function setFee(
@@ -130,75 +158,135 @@ contract Core is Ownable {
     }
 
     function _distributeFees(uint256 amount) internal {
-        Balances[dao] += amount;
+        balances[dao] += amount;
     }
 
-    function UpdateOwner(address newOwner) external onlyOwner {
-        transferOwnership(newOwner);
-    }
-
-    function withdrawBalance() external {
-        uint256 amount = Balances[msg.sender];
+    function withdrawBalance() external nonReentrant {
+        uint256 amount = balances[msg.sender];
         if (amount <= 0) {
             revert Core__InsufficientBalance();
         }
-        Balances[msg.sender] = 0;
+        balances[msg.sender] = 0;
         (bool success,) = msg.sender.call{value: amount}("");
         require(success, "Transfer failed.");
 
         emit BalanceWithdrawn(msg.sender, amount);
     }
-    //room
 
-    function createRoom(address tokenAddress, address[] memory roomAgents) external payable returns (address) {
-        if (roomAgents.length == 0) {
-            revert Core__InvalidRoomAgents();
-        }
-        if (roomAgents.length > 5) {
-            revert Core__InvalidRoomAgents();
-        }
-        if (msg.value != fees.roomCreationFee) {
-            revert Core__IncorrectRoomCreationFee();
-        }
-
-        // Verify all agents exist and are active
-        for (uint256 i = 0; i < roomAgents.length; i++) {
-            if (agents[roomAgents[i]].Creator == address(0)) {
-                revert Core__AgentDoesNotExist(roomAgents[i]);
-            }
-            if (!agents[roomAgents[i]].isActive) {
-                revert Core__AgentNotActive(roomAgents[i]);
-            }
-        }
-
-        Room newRoom = new Room(
-            tokenAddress,
-            msg.sender,
-            address(this),
-            roomAgents,
-            USDC,
-            0.01 ether, // roomEntryFee
-            0.01 ether, // messageInjectionFee
-            0.01 ether // muteForaMinuteFee
-        );
-
-        RoomStructure memory room = RoomStructure({token: tokenAddress, creator: msg.sender, isActive: true});
-        rooms[address(newRoom)] = room;
-
-        _distributeFees(fees.roomCreationFee);
-
-        emit RoomCreated(address(newRoom), msg.sender);
-        return address(newRoom);
+    function setRoomImplementation(address implementation) external onlyOwner {
+        roomImplementation = implementation;
     }
 
-    function updateRoom(address roomAddress, bool isactive, address creator) external {
-        if (rooms[roomAddress].creator != msg.sender) {
+    function createRoom(
+        address gameMaster,
+        address creator,
+        address tokenAddress,
+        address[] memory roomAgentWallets,
+        address diamond // Add diamond parameter
+    ) external payable onlyOwner returns (address) {
+        // Check if the token address is a valid ERC20 tokenAddress
+        // TODO shallow check, should check all functions that are needed for real trading
+        // try IERC20(tokenAddress).totalSupply() returns (uint256) {}
+        // catch {
+        //     revert Core__CreateRoomInvalidToken();
+        // }
+
+        // Check if there is enough balance for creator to cover the room creation fee
+        if (balances[creator] < fees.roomCreationFee) {
+            revert Core__InsufficientBalance();
+        }
+        // Check if there is at least one agent
+        if (roomAgentWallets.length == 0) {
+            revert Core__InvalidRoomAgents();
+        }
+        if (roomAgentWallets.length > maxAgentsPerRoom) {
+            revert Core__InvalidRoomAgents();
+        }
+        // if (msg.value != fees.roomCreationFee) {
+        //     revert Core__IncorrectRoomCreationFee();
+        // }
+
+        for (uint256 i = 0; i < roomAgentWallets.length; i++) {
+            address agentAddress = roomAgentWallets[i];
+            (uint256 agentId, bool isActive,) = getAgentByWallet(agentAddress);
+            if (agentId == 0) {
+                revert Core__AgentWalletNotFound(agentAddress);
+            }
+            if (!isActive) {
+                revert Core__AgentNotActive(agentId);
+            }
+        }
+
+        if (roomImplementation == address(0)) {
+            revert Core__RoomImplementationNotSet();
+        }
+
+        // Deploy minimal proxy clone of the room implementation
+        address newRoom = Clones.clone(roomImplementation);
+
+        // Initialize the room with diamond address
+        IRoom(newRoom).initialize(
+            gameMaster,
+            tokenAddress,
+            creator,
+            address(this),
+            USDC,
+            0.01 ether, // roomEntryFee
+            roomAgentWallets,
+            diamond // Pass diamond address
+        );
+
+        RoomStructure memory room = RoomStructure({
+            token: tokenAddress,
+            creator: creator, // Fix: use creator parameter instead of msg.sender
+            isActive: true
+        });
+        rooms[newRoom] = room;
+
+        //Transfer the room creation fee to the dao
+        balances[creator] -= fees.roomCreationFee;
+        balances[dao] += fees.roomCreationFee;
+
+        emit RoomCreated(newRoom, creator);
+        return newRoom;
+    }
+
+    function updateRoom(address roomAddress, bool isactive, address newCreator) external {
+        address roomCreator = rooms[roomAddress].creator;
+
+        if (msg.sender == owner()) {
+            // Admin can only change active status, not transfer ownership
+            if (newCreator != roomCreator) {
+                revert Core__UnauthorizedAccessofRoom();
+            }
+            rooms[roomAddress].isActive = isactive;
+        } else if (msg.sender == roomCreator) {
+            // Room creator can change both status and transfer ownership
+            rooms[roomAddress].isActive = isactive;
+            rooms[roomAddress].creator = newCreator;
+        } else {
             revert Core__UnauthorizedAccessofRoom();
         }
-        rooms[roomAddress].isActive = isactive;
-        rooms[roomAddress].creator = creator;
 
-        emit RoomUpdated(roomAddress, creator, isactive);
+        emit RoomUpdated(roomAddress, newCreator, isactive);
+    }
+
+    function registerAgentWallet(uint256 agentId, address altWallet) external onlyOwner {
+        if (agents[agentId].creator == address(0)) {
+            revert Core__AgentDoesNotExist(agentId);
+        }
+        if (agentWallets[altWallet] != 0) {
+            revert Core__AgentAltWalletAlreadyExists();
+        }
+        agentWallets[altWallet] = agentId;
+        agents[agentId].wallets.push(altWallet);
+        emit AgentWalletsUpdated(agentId, altWallet);
+    }
+    //returns agentId, isActive, creatorAddress
+
+    function getAgentByWallet(address wallet) public view returns (uint256, bool, address) {
+        uint256 agentId = agentWallets[wallet];
+        return (agentId, agents[agentId].isActive, agents[agentId].creator); //if you get a 0 address, no agent found
     }
 
     //getters
@@ -206,8 +294,8 @@ contract Core is Ownable {
         return (rooms[roomAddress].token, rooms[roomAddress].creator, rooms[roomAddress].isActive);
     }
 
-    function getAgent(address agentAddress) external view returns (address, bool) {
-        return (agents[agentAddress].Creator, agents[agentAddress].isActive);
+    function getAgent(uint256 agentId) external view returns (address, bool, address[] memory, address[] memory) {
+        return (agents[agentId].creator, agents[agentId].isActive, agents[agentId].wallets, agents[agentId].rooms);
     }
 
     function getFees() external view returns (uint256, uint256, uint256, uint256, uint256) {
@@ -215,6 +303,16 @@ contract Core is Ownable {
     }
 
     function getBalance(address user) external view returns (uint256) {
-        return Balances[user];
+        return balances[user];
+    }
+
+    function deposit() external payable {
+        if (msg.value <= 0) {
+            revert Core__FeeZero();
+        }
+
+        balances[msg.sender] += msg.value;
+
+        emit BalanceDeposited(msg.sender, msg.value);
     }
 }

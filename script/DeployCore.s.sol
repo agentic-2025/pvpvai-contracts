@@ -1,21 +1,26 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.20;
 
 // TODO This
 import {Script} from "forge-std/Script.sol";
-import {Core} from "../src/Core.sol";
-import {MockUSDC} from "./DeployMockUSDC.s.sol";
+import "../src/Core.sol";
+import "../src/Room.sol";
 
 contract DeployCore is Script {
-    function run() public returns (Core) {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+    function run() external returns (address) {
+        vm.startBroadcast();
 
-        // Deploy MockUSDC first
-        vm.startBroadcast(deployerPrivateKey);
-        MockUSDC usdc = new MockUSDC();
-        Core core = new Core(address(usdc));
+        // Deploy Room implementation - no constructor args needed now
+        Room roomImpl = new Room();
+
+        // Deploy Core with USDC address
+        Core core = new Core(address(0)); // Replace with actual USDC address
+
+        // Set Room implementation in Core
+        core.setRoomImplementation(address(roomImpl));
+
         vm.stopBroadcast();
 
-        return core;
+        return address(core);
     }
 }
