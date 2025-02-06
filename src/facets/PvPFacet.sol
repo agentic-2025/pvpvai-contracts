@@ -63,15 +63,20 @@ contract PvPFacet is IPvP {
 
         // Copy supported actions
         for (uint256 i = 0; i < ds.globalSupportedPvpVerbs.length; i++) {
+            console2.log("(PvPFacet) Copying global supported PvP action:", ds.globalSupportedPvpVerbs[i]);
             string memory verb = ds.globalSupportedPvpVerbs[i];
             round.supportedPvpActions[verb] = ds.globalSupportedPvpActions[verb];
             round.supportedPvpVerbs.push(verb);
+            console2.log("(PvPFacet) Supported PvP actions:", round.supportedPvpActions[verb].verb);
         }
     }
 
-    function updateSupportedPvpActions(string memory verb, PvpActionCategory category, uint256 fee, uint32 duration)
-        external
-    {
+    function updateGlobalSupportedPvpActions(
+        string memory verb,
+        PvpActionCategory category,
+        uint256 fee,
+        uint32 duration
+    ) external {
         DiamondStorage storage ds = diamondStorage();
         bool newAction =
             keccak256(abi.encodePacked(ds.globalSupportedPvpActions[verb].verb)) == keccak256(abi.encodePacked(""));
@@ -85,7 +90,7 @@ contract PvPFacet is IPvP {
         emit PvpActionsUpdated(verb, category, fee, duration, newAction, !newAction);
     }
 
-    function removeSupportedPvpActions(string memory verb) external {
+    function removeGlobalSupportedPvpActions(string memory verb) external {
         DiamondStorage storage ds = diamondStorage();
         delete ds.globalSupportedPvpActions[verb];
 
@@ -164,7 +169,7 @@ contract PvPFacet is IPvP {
         emit PvpActionInvoked(verb, target, endTime, parameters);
     }
 
-    function getSupportedPvpActions() external view returns (PvpAction[] memory) {
+    function getGlobalSupportedPvpActions() external view returns (PvpAction[] memory) {
         DiamondStorage storage ds = diamondStorage();
         PvpAction[] memory actions = new PvpAction[](ds.globalSupportedPvpVerbs.length);
 
@@ -200,5 +205,36 @@ contract PvPFacet is IPvP {
         DiamondStorage storage ds = diamondStorage();
         Round storage round = ds.rounds[roundId];
         round.pvpEnabled = enabled;
+    }
+
+    // Add new getters
+    function getRoundState(uint256 roundId)
+        external
+        view
+        returns (
+            uint8 state,
+            uint40 startTime,
+            uint40 endTime,
+            bool pvpEnabled,
+            uint256 numSupportedActions,
+            uint256 numActiveStatuses
+        )
+    {
+        DiamondStorage storage ds = diamondStorage();
+        Round storage round = ds.rounds[roundId];
+
+        return (
+            round.state,
+            round.startTime,
+            round.endTime,
+            round.pvpEnabled,
+            round.supportedPvpVerbs.length,
+            0 // TODO: Add count of active statuses if needed
+        );
+    }
+
+    function getCurrentRoundId() external view returns (uint256) {
+        DiamondStorage storage ds = diamondStorage();
+        return ds.currentRoundId;
     }
 }

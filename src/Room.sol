@@ -193,7 +193,6 @@ contract Room is Ownable, ReentrancyGuard {
 
         // Initialize PvP Facet's storage for this round
         PvPFacet(diamond).updateRoundState(currentRoundId, uint8(RoundState.ACTIVE));
-
     }
 
     // Will worry about colledting the fee for the agent creator later, let's just get something functional for now
@@ -402,7 +401,6 @@ contract Room is Ownable, ReentrancyGuard {
         }
         emit MarketResolved(currentRoundId);
     }
-
 
     function checkUpKeep(bytes calldata) external view returns (bool upkeepNeeded, bytes memory) {
         //ask team if frontend can. chainlink means, creating subscription + link for every room contract

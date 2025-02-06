@@ -119,15 +119,18 @@ contract SetupGameTest is Script {
         console2.log("PvP Facet deployed at:", address(pvpFacet));
 
         // Get function selectors for PvP Facet
-        bytes4[] memory selectors = new bytes4[](8);
-        selectors[0] = PvPFacet.updateSupportedPvpActions.selector;
-        selectors[1] = PvPFacet.removeSupportedPvpActions.selector;
+        bytes4[] memory selectors = new bytes4[](11);
+        selectors[0] = PvPFacet.updateGlobalSupportedPvpActions.selector;
+        selectors[1] = PvPFacet.removeGlobalSupportedPvpActions.selector;
         selectors[2] = PvPFacet.invokePvpAction.selector;
-        selectors[3] = PvPFacet.getSupportedPvpActions.selector;
+        selectors[3] = PvPFacet.getSupportedPvpActionsForRound.selector;
         selectors[4] = PvPFacet.getPvpStatuses.selector;
         selectors[5] = PvPFacet.updateRoundState.selector;
         selectors[6] = PvPFacet.updatePvpEnabled.selector;
         selectors[7] = PvPFacet.setGlobalPvpEnabled.selector;
+        selectors[8] = PvPFacet.startRound.selector;
+        selectors[9] = PvPFacet.getCurrentRoundId.selector;
+        selectors[10] = PvPFacet.getRoundState.selector;
 
         // Add PvP Facet to Diamond
         diamond.addFacet(address(pvpFacet), selectors);
@@ -137,28 +140,28 @@ contract SetupGameTest is Script {
         PvPFacet(address(diamond)).setGlobalPvpEnabled(true);
 
         // Initialize some PvP actions
-        PvPFacet(address(diamond)).updateSupportedPvpActions(
+        PvPFacet(address(diamond)).updateGlobalSupportedPvpActions(
             "silence",
             IPvP.PvpActionCategory.STATUS_EFFECT,
             0, // fee
             60 // duration in seconds
         );
 
-        PvPFacet(address(diamond)).updateSupportedPvpActions(
+        PvPFacet(address(diamond)).updateGlobalSupportedPvpActions(
             "deafen",
             IPvP.PvpActionCategory.STATUS_EFFECT,
             0, // fee
             60 // duration in seconds
         );
 
-        PvPFacet(address(diamond)).updateSupportedPvpActions(
+        PvPFacet(address(diamond)).updateGlobalSupportedPvpActions(
             "poison",
             IPvP.PvpActionCategory.STATUS_EFFECT,
             0, // fee
             60 // duration in seconds
         );
 
-        PvPFacet(address(diamond)).updateSupportedPvpActions(
+        PvPFacet(address(diamond)).updateGlobalSupportedPvpActions(
             "attack",
             IPvP.PvpActionCategory.DIRECT_ACTION,
             0, // fee

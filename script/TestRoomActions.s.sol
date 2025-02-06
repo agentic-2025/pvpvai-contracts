@@ -11,7 +11,7 @@ contract TestRoomActions is Script {
     // Constants for target addresses
     address constant TARGET_1 = 0x4ffE2DF7B11ea3f28c6a7C90b39F52427c9D550d;
     address constant TARGET_2 = 0x830598617569AfD7Ad16343f5D4a226578b16A3d;
-    address constant ROOM_ADDRESS = 0xf01B10A7E1855659A00C320ceB82F6A18bA01bf4;
+    address constant ROOM_ADDRESS = 0x4fC59812f1AA8A00B61D2B1F378096C3bf9880d3;
 
     function run() external {
         // Load private key and start broadcasting
@@ -26,10 +26,10 @@ contract TestRoomActions is Script {
 
         // room.performUpKeep("");
         console2.log("Round state:", ROOM_ADDRESS);
+            room.startRound();
 
         if (room.getRoundState(room.currentRoundId()) == Room.RoundState.INACTIVE) {
             console2.log("Round is inactive, starting round");
-            room.startRound();
         }
 
         if (room.getRoundState(room.currentRoundId()) == Room.RoundState.CLOSED) {
@@ -82,30 +82,12 @@ contract TestRoomActions is Script {
         // Add debug logs
         console2.log("Diamond address:", room.diamond());
 
-        // Try to get supported PvP actions first
-        try IPvPFacet(room.diamond()).getSupportedPvpActions() returns (IPvP.PvpAction[] memory actions) {
-            console2.log("Number of supported PvP actions:", actions.length);
-            for (uint256 i = 0; i < actions.length; i++) {
-                console2.log("Action verb:", actions[i].verb);
-            }
-        } catch Error(string memory reason) {
-            console2.log("Error getting supported actions:", reason);
-        } catch {
-            console2.log("Unknown error getting supported actions");
-        }
+        // Dump PvP state before starting round
+        console2.log("\n=== PvP State Before Round Start ===");
+        dumpPvPState(IPvPFacet(room.diamond()), room.currentRoundId());
 
-        // log supported actioon on facet
-        try IPvPFacet(room.diamond()).getSupportedPvpActionsForRound(room.currentRoundId) returns (IPvP.PvpAction[] memory actions) {
-            console2.log("Number of supported PvP actions:", actions.length);
-            for (uint256 i = 0; i < actions.length; i++) {
-                console2.log("Action verb:", actions[i].verb);
-            }
-        }
-        catch {
-            console2.log("Unknown error getting supported actions");
-        }
         // Original PvP action calls with try-catch
-        console2.log("Invoking PvP actions");
+        console2.log("\nInvoking PvP actions");
         try room.invokePvpAction(TARGET_1, "silence", "") {
             console2.log("Silence action succeeded");
         } catch Error(string memory reason) {
@@ -113,6 +95,10 @@ contract TestRoomActions is Script {
         } catch {
             console2.log("Unknown error invoking silence");
         }
+
+        // Dump PvP state after action
+        console2.log("\n=== PvP State After Action ===");
+        dumpPvPState(IPvPFacet(room.diamond()), room.currentRoundId());
 
         console2.log("Invoking deafen action on ", TARGET_2);
         room.invokePvpAction(TARGET_2, "deafen", "");
@@ -122,5 +108,57 @@ contract TestRoomActions is Script {
 
         console2.log("Actions completed");
         vm.stopBroadcast();
+    }
+
+    function dumpPvPState(IPvPFacet pvp, uint256 roundId) internal view {
+        console2.log("\n=== Global PvP State ===");
+        try pvp.getGlobalSupportedPvpActions() returns (IPvP.PvpAction[] memory actions) {
+            console2.log("Number of global supported PvP actions:", actions.length);
+            for (uint256 i = 0; i < actions.length; i++) {
+                console2.log("Global action", i, ":");
+                console2.log("  Verb:", actions[i].verb);
+                console2.log("  Category:", uint256(actions[i].category));
+                console2.log("  Fee:", actions[i].fee);
+                console2.log("  Duration:", actions[i].duration);
+            }
+        } catch Error(string memory reason) {
+            console2.log("Error getting global actions:", reason);
+        } catch {
+            console2.log("Unknown error getting global actions");
+        }
+
+        console2.log("\n=== Round State ===");
+        try pvp.getRoundState(roundId) returns (
+            uint8 state,
+            uint40 startTime,
+            uint40 endTime,
+            bool pvpEnabled,
+            uint256 numSupportedActions,
+            uint256 numActiveStatuses
+        ) {
+            console2.log("Round ID:", roundId);
+            console2.log("State:", state);
+            console2.log("Start time:", startTime);
+            console2.log("End time:", endTime);
+            console2.log("PvP enabled:", pvpEnabled);
+            console2.log("Number of supported actions:", numSupportedActions);
+            console2.log("Number of active statuses:", numActiveStatuses);
+        } catch {
+            console2.log("Error getting round state");
+        }
+
+        console2.log("\n=== Round PvP Actions ===");
+        try pvp.getSupportedPvpActionsForRound(roundId) returns (IPvP.PvpAction[] memory actions) {
+            console2.log("Number of round-specific PvP actions:", actions.length);
+            for (uint256 i = 0; i < actions.length; i++) {
+                console2.log("Round action", i, ":");
+                console2.log("  Verb:", actions[i].verb);
+                console2.log("  Category:", uint256(actions[i].category));
+                console2.log("  Fee:", actions[i].fee);
+                console2.log("  Duration:", actions[i].duration);
+            }
+        } catch {
+            console2.log("Error getting round actions");
+        }
     }
 }
