@@ -67,7 +67,6 @@ contract Room is Ownable, ReentrancyGuard {
     }
 
     address payable public core;
-    RoomFees public fees;
     uint256 public feeBalance;
 
     address public gameMaster;
@@ -79,8 +78,7 @@ contract Room is Ownable, ReentrancyGuard {
     uint32 public maxAgents = 5;
     uint32 public currentAgentCount = 0;
     // uint40 public roundDuration = 1 minutes;
-    uint40 public roundDuration = 10 seconds;
-    uint256 public PROCESSING_DURATION = 1 seconds; //TODO Just for testing
+    uint40 public roundDuration = 30 seconds;
     bool public pvpEnabled;
 
     struct Round {
@@ -95,10 +93,6 @@ contract Room is Ownable, ReentrancyGuard {
         mapping(address => AgentPosition) agentPositions;
         mapping(address => bool) hasClaimedWinnings;
         mapping(address => PvpStatus[]) pvpStatuses;
-    }
-
-    struct RoomFees {
-        uint256 roomEntryFee;
     }
 
     struct UserBet {
@@ -178,7 +172,6 @@ contract Room is Ownable, ReentrancyGuard {
         address _token,
         address _creator,
         address _core,
-        uint256 _roomEntryFee,
         address[] memory _initialAgents,
         address[] memory _initialAgentFeeRecipients,
         uint256[] memory _initialAgentIds
@@ -191,7 +184,6 @@ contract Room is Ownable, ReentrancyGuard {
         token = _token;
         creator = _creator;
         core = payable(_core);
-        fees = RoomFees({roomEntryFee: _roomEntryFee});
         pvpEnabled = true;
         for (uint256 i; i < _initialAgents.length; i++) {
             agentData[_initialAgents[i]] =
@@ -227,11 +219,6 @@ contract Room is Ownable, ReentrancyGuard {
         }
         if (!found) revert Room_AgentNotExists(agent);
         emit AgentRemoved(agent);
-    }
-
-    function updateFees(uint256 roomEntryFee) public onlyCreator {
-        fees = RoomFees({roomEntryFee: roomEntryFee});
-        emit FeesUpdated(roomEntryFee);
     }
 
     function updateRoundDuration(uint40 newDuration) public onlyCreator {
@@ -350,12 +337,12 @@ contract Room is Ownable, ReentrancyGuard {
 
     function startRound() public onlyGameMaster {
         //TODO comment this back in
-      
+
         // if (rounds[currentRoundId].endTime < block.timestamp) {
         //     revert Room_RoundNotExpectedStatus(RoundState.INACTIVE, rounds[currentRoundId].state);
         // }
         // if (rounds[currentRoundId].state != RoundState.INACTIVE && rounds[currentRoundId].state != RoundState.CLOSED) {
-            // revert Room_RoundNotExpectedStatus(RoundState.INACTIVE, rounds[currentRoundId].state);
+        // revert Room_RoundNotExpectedStatus(RoundState.INACTIVE, rounds[currentRoundId].state);
         // }
 
         currentRoundId++;
@@ -427,7 +414,7 @@ contract Room is Ownable, ReentrancyGuard {
 
         // Calculate cuts based on percentages (assuming BASIS_POINTS is 1000)
         // Creator: 2% = 20
-        // Agent Creator: 2% = 20 
+        // Agent Creator: 2% = 20
         // DAO: 1% = 10
         uint256 roomCreatorCut = (totalFees * roomCreatorPercent) / basisPoint;
         uint256 agentCreatorCut = (totalFees * agentCreatorPercent) / basisPoint;
@@ -458,14 +445,15 @@ contract Room is Ownable, ReentrancyGuard {
 
         emit FeesDistributed(roundId);
     }
-    function getTotalBets(uint256 roundId, address agent) public view returns (uint256 buyAmount,uint256 sellAmount, uint256 holfAmount){
+
+    function getTotalBets(uint256 roundId, address agent)
+        public
+        view
+        returns (uint256 buyAmount, uint256 sellAmount, uint256 holfAmount)
+    {
         Round storage round = rounds[roundId];
         AgentPosition storage position = round.agentPositions[agent];
         return (position.buyPool, position.sell, position.hold);
-    }
-
-    function getRoomFees() public view returns (RoomFees memory) {
-        return fees;
     }
 
     function getRoundState(uint256 roundId) public view returns (RoundState) {
@@ -569,10 +557,14 @@ contract Room is Ownable, ReentrancyGuard {
         emit PvpActionInvoked(verb, target, endTime, parameters);
     }
 
-    function getPvpStatuses(uint256 roundId, address agent) public view returns (PvpStatus[] memory) {
-        return rounds[roundId].pvpStatuses[agent];
+    function getPvpStatuses(address agent) public view returns (PvpStatus[] memory) {
+        return rounds[currentRoundId].pvpStatuses[agent];
     }
-    
+
+    function getAgents() public view returns (address[] memory) {
+        return activeAgents;
+    }
+
     function changeRoundState(RoundState newState) public onlyGameMaster {
         Round storage round = rounds[currentRoundId];
         round.state = newState;

@@ -1457,7 +1457,6 @@ export const iRoomAbi = [
       { name: 'token', internalType: 'address', type: 'address' },
       { name: 'creator', internalType: 'address', type: 'address' },
       { name: 'core', internalType: 'address', type: 'address' },
-      { name: 'roomEntryFee', internalType: 'uint256', type: 'uint256' },
       { name: 'initialAgents', internalType: 'address[]', type: 'address[]' },
       {
         name: 'initialAgentFeeRecipients',
@@ -1977,13 +1976,6 @@ export const roomAbi = [
   { type: 'receive', stateMutability: 'payable' },
   {
     type: 'function',
-    inputs: [],
-    name: 'PROCESSING_DURATION',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
     inputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
     name: 'activeAgents',
     outputs: [{ name: '', internalType: 'address', type: 'address' }],
@@ -2016,6 +2008,15 @@ export const roomAbi = [
     name: 'calculateWinnings',
     outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
     stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'newState', internalType: 'enum Room.RoundState', type: 'uint8' },
+    ],
+    name: 'changeRoundState',
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -2062,15 +2063,6 @@ export const roomAbi = [
   {
     type: 'function',
     inputs: [],
-    name: 'fees',
-    outputs: [
-      { name: 'roomEntryFee', internalType: 'uint256', type: 'uint256' },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
     name: 'gameMaster',
     outputs: [{ name: '', internalType: 'address', type: 'address' }],
     stateMutability: 'view',
@@ -2104,6 +2096,13 @@ export const roomAbi = [
   },
   {
     type: 'function',
+    inputs: [],
+    name: 'getAgents',
+    outputs: [{ name: '', internalType: 'address[]', type: 'address[]' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     inputs: [
       { name: 'roundId', internalType: 'uint256', type: 'uint256' },
       { name: 'user', internalType: 'address', type: 'address' },
@@ -2114,10 +2113,7 @@ export const roomAbi = [
   },
   {
     type: 'function',
-    inputs: [
-      { name: 'roundId', internalType: 'uint256', type: 'uint256' },
-      { name: 'agent', internalType: 'address', type: 'address' },
-    ],
+    inputs: [{ name: 'agent', internalType: 'address', type: 'address' }],
     name: 'getPvpStatuses',
     outputs: [
       {
@@ -2129,22 +2125,6 @@ export const roomAbi = [
           { name: 'instigator', internalType: 'address', type: 'address' },
           { name: 'endTime', internalType: 'uint40', type: 'uint40' },
           { name: 'parameters', internalType: 'bytes', type: 'bytes' },
-        ],
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'getRoomFees',
-    outputs: [
-      {
-        name: '',
-        internalType: 'struct Room.RoomFees',
-        type: 'tuple',
-        components: [
-          { name: 'roomEntryFee', internalType: 'uint256', type: 'uint256' },
         ],
       },
     ],
@@ -2177,6 +2157,20 @@ export const roomAbi = [
     type: 'function',
     inputs: [
       { name: 'roundId', internalType: 'uint256', type: 'uint256' },
+      { name: 'agent', internalType: 'address', type: 'address' },
+    ],
+    name: 'getTotalBets',
+    outputs: [
+      { name: 'buyAmount', internalType: 'uint256', type: 'uint256' },
+      { name: 'sellAmount', internalType: 'uint256', type: 'uint256' },
+      { name: 'holfAmount', internalType: 'uint256', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'roundId', internalType: 'uint256', type: 'uint256' },
       { name: 'user', internalType: 'address', type: 'address' },
     ],
     name: 'getUserBet',
@@ -2201,7 +2195,6 @@ export const roomAbi = [
       { name: '_token', internalType: 'address', type: 'address' },
       { name: '_creator', internalType: 'address', type: 'address' },
       { name: '_core', internalType: 'address', type: 'address' },
-      { name: '_roomEntryFee', internalType: 'uint256', type: 'uint256' },
       { name: '_initialAgents', internalType: 'address[]', type: 'address[]' },
       {
         name: '_initialAgentFeeRecipients',
@@ -2364,15 +2357,6 @@ export const roomAbi = [
     type: 'function',
     inputs: [{ name: 'newOwner', internalType: 'address', type: 'address' }],
     name: 'transferOwnership',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [
-      { name: 'roomEntryFee', internalType: 'uint256', type: 'uint256' },
-    ],
-    name: 'updateFees',
     outputs: [],
     stateMutability: 'nonpayable',
   },

@@ -232,7 +232,6 @@ contract Core is Ownable, ReentrancyGuard {
             tokenAddress,
             creator,
             address(this),
-            0.01 ether, // roomEntryFee
             roomAgentWallets,
             roomAgentFeeRecipients,
             roomAgentIds
