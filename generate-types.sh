@@ -23,7 +23,7 @@ mkdir -p ../pvpvai-backend/src/types
 
 # Copy generated types to frontend and backend
 echo "Copying types to frontend and backend..."
-cp types/generated.ts ../pvpvai-frontend/app/lib/types/
-cp types/generated.ts ../pvpvai-backend/src/types/
+cp types/generated.ts ../pvpvai-frontend/lib/contract.types.ts
+cp types/generated.ts ../pvpvai-backend/src/types/contract.types.ts 
 
 echo "✨ Types generated and copied successfully!" 

@@ -74,7 +74,7 @@ console2.log("Account3 address:", account3);
        
         // 2. Deploy Core contract
         vm.broadcast(deployer);
-        core = new Core(address(usdc));
+        core = new Core(address(usdc)); // Deploy core
         console2.log("Core deployed at:", address(core));
 
         // Deploy Room implementation
@@ -148,6 +148,7 @@ console2.log("Account3 address:", account3);
 
 
         vm.broadcast(deployer);
+        // Create room
         address roomAddress = core.createRoom(
             deployer, account1, address(usdc), agentWallets, feeRecipients, agentIds, address(roomImplementation)
         );

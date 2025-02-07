@@ -349,9 +349,14 @@ contract Room is Ownable, ReentrancyGuard {
     }
 
     function startRound() public onlyGameMaster {
-        if (rounds[currentRoundId].state != RoundState.INACTIVE && rounds[currentRoundId].state != RoundState.CLOSED) {
-            revert Room_RoundNotExpectedStatus(RoundState.INACTIVE, rounds[currentRoundId].state);
-        }
+        //TODO comment this back in
+      
+        // if (rounds[currentRoundId].endTime < block.timestamp) {
+        //     revert Room_RoundNotExpectedStatus(RoundState.INACTIVE, rounds[currentRoundId].state);
+        // }
+        // if (rounds[currentRoundId].state != RoundState.INACTIVE && rounds[currentRoundId].state != RoundState.CLOSED) {
+            // revert Room_RoundNotExpectedStatus(RoundState.INACTIVE, rounds[currentRoundId].state);
+        // }
 
         currentRoundId++;
         Round storage round = rounds[currentRoundId];

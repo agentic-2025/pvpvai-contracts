@@ -1,61 +1,4 @@
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// AutomationBase
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-export const automationBaseAbi = [
-  { type: 'error', inputs: [], name: 'OnlySimulatedBackend' },
-] as const
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// AutomationCompatible
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-export const automationCompatibleAbi = [
-  {
-    type: 'function',
-    inputs: [{ name: 'checkData', internalType: 'bytes', type: 'bytes' }],
-    name: 'checkUpkeep',
-    outputs: [
-      { name: 'upkeepNeeded', internalType: 'bool', type: 'bool' },
-      { name: 'performData', internalType: 'bytes', type: 'bytes' },
-    ],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: 'performData', internalType: 'bytes', type: 'bytes' }],
-    name: 'performUpkeep',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  { type: 'error', inputs: [], name: 'OnlySimulatedBackend' },
-] as const
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// AutomationCompatibleInterface
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-export const automationCompatibleInterfaceAbi = [
-  {
-    type: 'function',
-    inputs: [{ name: 'checkData', internalType: 'bytes', type: 'bytes' }],
-    name: 'checkUpkeep',
-    outputs: [
-      { name: 'upkeepNeeded', internalType: 'bool', type: 'bool' },
-      { name: 'performData', internalType: 'bytes', type: 'bytes' },
-    ],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: 'performData', internalType: 'bytes', type: 'bytes' }],
-    name: 'performUpkeep',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-] as const
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Clones
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -151,7 +94,13 @@ export const coreAbi = [
         internalType: 'address[]',
         type: 'address[]',
       },
-      { name: 'diamond', internalType: 'address', type: 'address' },
+      {
+        name: 'roomAgentFeeRecipients',
+        internalType: 'address[]',
+        type: 'address[]',
+      },
+      { name: 'roomAgentIds', internalType: 'uint256[]', type: 'uint256[]' },
+      { name: 'roomImplementation', internalType: 'address', type: 'address' },
     ],
     name: 'createRoom',
     outputs: [{ name: '', internalType: 'address', type: 'address' }],
@@ -271,13 +220,6 @@ export const coreAbi = [
   },
   {
     type: 'function',
-    inputs: [],
-    name: 'roomImplementation',
-    outputs: [{ name: '', internalType: 'address', type: 'address' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
     inputs: [{ name: '', internalType: 'address', type: 'address' }],
     name: 'rooms',
     outputs: [
@@ -304,15 +246,6 @@ export const coreAbi = [
       { name: 'daocut', internalType: 'uint256', type: 'uint256' },
     ],
     name: 'setFee',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [
-      { name: 'implementation', internalType: 'address', type: 'address' },
-    ],
-    name: 'setRoomImplementation',
     outputs: [],
     stateMutability: 'nonpayable',
   },
@@ -1447,186 +1380,8 @@ export const iPvPAbi = [
       { name: 'state', internalType: 'uint8', type: 'uint8' },
       { name: 'startTime', internalType: 'uint40', type: 'uint40' },
       { name: 'endTime', internalType: 'uint40', type: 'uint40' },
-      { name: 'pvpEnabled', internalType: 'bool', type: 'bool' },
       { name: 'numSupportedActions', internalType: 'uint256', type: 'uint256' },
       { name: 'numActiveStatuses', internalType: 'uint256', type: 'uint256' },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: 'roundId', internalType: 'uint256', type: 'uint256' }],
-    name: 'getSupportedPvpActionsForRound',
-    outputs: [
-      {
-        name: '',
-        internalType: 'struct IPvP.PvpAction[]',
-        type: 'tuple[]',
-        components: [
-          { name: 'verb', internalType: 'string', type: 'string' },
-          {
-            name: 'category',
-            internalType: 'enum IPvP.PvpActionCategory',
-            type: 'uint8',
-          },
-          { name: 'fee', internalType: 'uint256', type: 'uint256' },
-          { name: 'duration', internalType: 'uint32', type: 'uint32' },
-        ],
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [
-      { name: 'target', internalType: 'address', type: 'address' },
-      { name: 'verb', internalType: 'string', type: 'string' },
-      { name: 'parameters', internalType: 'bytes', type: 'bytes' },
-    ],
-    name: 'invokePvpAction',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: 'verb', internalType: 'string', type: 'string' }],
-    name: 'removeGlobalSupportedPvpActions',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: 'enabled', internalType: 'bool', type: 'bool' }],
-    name: 'setGlobalPvpEnabled',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: 'roundId', internalType: 'uint256', type: 'uint256' }],
-    name: 'startRound',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [
-      { name: 'verb', internalType: 'string', type: 'string' },
-      {
-        name: 'category',
-        internalType: 'enum IPvP.PvpActionCategory',
-        type: 'uint8',
-      },
-      { name: 'fee', internalType: 'uint256', type: 'uint256' },
-      { name: 'duration', internalType: 'uint32', type: 'uint32' },
-    ],
-    name: 'updateGlobalSupportedPvpActions',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [
-      { name: 'roundId', internalType: 'uint256', type: 'uint256' },
-      { name: 'state', internalType: 'uint8', type: 'uint8' },
-    ],
-    name: 'updateRoundState',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-] as const
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// IPvPFacet
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-export const iPvPFacetAbi = [
-  {
-    type: 'function',
-    inputs: [],
-    name: 'getCurrentRoundId',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'getGlobalSupportedPvpActions',
-    outputs: [
-      {
-        name: '',
-        internalType: 'struct IPvP.PvpAction[]',
-        type: 'tuple[]',
-        components: [
-          { name: 'verb', internalType: 'string', type: 'string' },
-          {
-            name: 'category',
-            internalType: 'enum IPvP.PvpActionCategory',
-            type: 'uint8',
-          },
-          { name: 'fee', internalType: 'uint256', type: 'uint256' },
-          { name: 'duration', internalType: 'uint32', type: 'uint32' },
-        ],
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [
-      { name: 'roundId', internalType: 'uint256', type: 'uint256' },
-      { name: 'agent', internalType: 'address', type: 'address' },
-    ],
-    name: 'getPvpStatuses',
-    outputs: [
-      {
-        name: '',
-        internalType: 'struct IPvP.PvpStatus[]',
-        type: 'tuple[]',
-        components: [
-          { name: 'verb', internalType: 'string', type: 'string' },
-          { name: 'instigator', internalType: 'address', type: 'address' },
-          { name: 'endTime', internalType: 'uint40', type: 'uint40' },
-          { name: 'parameters', internalType: 'bytes', type: 'bytes' },
-        ],
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: 'roundId', internalType: 'uint256', type: 'uint256' }],
-    name: 'getRoundState',
-    outputs: [
-      { name: 'state', internalType: 'uint8', type: 'uint8' },
-      { name: 'startTime', internalType: 'uint40', type: 'uint40' },
-      { name: 'endTime', internalType: 'uint40', type: 'uint40' },
-      { name: 'pvpEnabled', internalType: 'bool', type: 'bool' },
-      { name: 'numSupportedActions', internalType: 'uint256', type: 'uint256' },
-      { name: 'numActiveStatuses', internalType: 'uint256', type: 'uint256' },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: 'roundId', internalType: 'uint256', type: 'uint256' }],
-    name: 'getSupportedPvpActionsForRound',
-    outputs: [
-      {
-        name: '',
-        internalType: 'struct IPvP.PvpAction[]',
-        type: 'tuple[]',
-        components: [
-          { name: 'verb', internalType: 'string', type: 'string' },
-          {
-            name: 'category',
-            internalType: 'enum IPvP.PvpActionCategory',
-            type: 'uint8',
-          },
-          { name: 'fee', internalType: 'uint256', type: 'uint256' },
-          { name: 'duration', internalType: 'uint32', type: 'uint32' },
-        ],
-      },
     ],
     stateMutability: 'view',
   },
@@ -1702,10 +1457,14 @@ export const iRoomAbi = [
       { name: 'token', internalType: 'address', type: 'address' },
       { name: 'creator', internalType: 'address', type: 'address' },
       { name: 'core', internalType: 'address', type: 'address' },
-      { name: 'usdc', internalType: 'address', type: 'address' },
       { name: 'roomEntryFee', internalType: 'uint256', type: 'uint256' },
       { name: 'initialAgents', internalType: 'address[]', type: 'address[]' },
-      { name: 'diamond', internalType: 'address', type: 'address' },
+      {
+        name: 'initialAgentFeeRecipients',
+        internalType: 'address[]',
+        type: 'address[]',
+      },
+      { name: 'initialAgentIds', internalType: 'uint256[]', type: 'uint256[]' },
     ],
     name: 'initialize',
     outputs: [],
@@ -2057,32 +1816,8 @@ export const pvPFacetAbi = [
       { name: 'state', internalType: 'uint8', type: 'uint8' },
       { name: 'startTime', internalType: 'uint40', type: 'uint40' },
       { name: 'endTime', internalType: 'uint40', type: 'uint40' },
-      { name: 'pvpEnabled', internalType: 'bool', type: 'bool' },
       { name: 'numSupportedActions', internalType: 'uint256', type: 'uint256' },
       { name: 'numActiveStatuses', internalType: 'uint256', type: 'uint256' },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: 'roundId', internalType: 'uint256', type: 'uint256' }],
-    name: 'getSupportedPvpActionsForRound',
-    outputs: [
-      {
-        name: '',
-        internalType: 'struct IPvP.PvpAction[]',
-        type: 'tuple[]',
-        components: [
-          { name: 'verb', internalType: 'string', type: 'string' },
-          {
-            name: 'category',
-            internalType: 'enum IPvP.PvpActionCategory',
-            type: 'uint8',
-          },
-          { name: 'fee', internalType: 'uint256', type: 'uint256' },
-          { name: 'duration', internalType: 'uint32', type: 'uint32' },
-        ],
-      },
     ],
     stateMutability: 'view',
   },
@@ -2239,6 +1974,7 @@ export const reentrancyGuardAbi = [
 
 export const roomAbi = [
   { type: 'constructor', inputs: [], stateMutability: 'nonpayable' },
+  { type: 'receive', stateMutability: 'payable' },
   {
     type: 'function',
     inputs: [],
@@ -2248,16 +1984,9 @@ export const roomAbi = [
   },
   {
     type: 'function',
-    inputs: [],
-    name: 'USDC',
-    outputs: [{ name: '', internalType: 'contract IERC20', type: 'address' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'USDC_DECIMALS',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
+    inputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
+    name: 'activeAgents',
+    outputs: [{ name: '', internalType: 'address', type: 'address' }],
     stateMutability: 'view',
   },
   {
@@ -2269,9 +1998,13 @@ export const roomAbi = [
   },
   {
     type: 'function',
-    inputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    name: 'agents',
-    outputs: [{ name: '', internalType: 'address', type: 'address' }],
+    inputs: [{ name: '', internalType: 'address', type: 'address' }],
+    name: 'agentData',
+    outputs: [
+      { name: 'feeRecipient', internalType: 'address', type: 'address' },
+      { name: 'coreId', internalType: 'uint256', type: 'uint256' },
+      { name: 'active', internalType: 'bool', type: 'bool' },
+    ],
     stateMutability: 'view',
   },
   {
@@ -2282,23 +2015,6 @@ export const roomAbi = [
     ],
     name: 'calculateWinnings',
     outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: 'participant', internalType: 'address', type: 'address' }],
-    name: 'checkRoomParticipant',
-    outputs: [{ name: '', internalType: 'bool', type: 'bool' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: '', internalType: 'bytes', type: 'bytes' }],
-    name: 'checkUpKeep',
-    outputs: [
-      { name: 'upkeepNeeded', internalType: 'bool', type: 'bool' },
-      { name: '', internalType: 'bytes', type: 'bytes' },
-    ],
     stateMutability: 'view',
   },
   {
@@ -2334,13 +2050,6 @@ export const roomAbi = [
     inputs: [],
     name: 'currentRoundId',
     outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'diamond',
-    outputs: [{ name: '', internalType: 'address', type: 'address' }],
     stateMutability: 'view',
   },
   {
@@ -2413,7 +2122,7 @@ export const roomAbi = [
     outputs: [
       {
         name: '',
-        internalType: 'struct IPvP.PvpStatus[]',
+        internalType: 'struct Room.PvpStatus[]',
         type: 'tuple[]',
         components: [
           { name: 'verb', internalType: 'string', type: 'string' },
@@ -2492,10 +2201,18 @@ export const roomAbi = [
       { name: '_token', internalType: 'address', type: 'address' },
       { name: '_creator', internalType: 'address', type: 'address' },
       { name: '_core', internalType: 'address', type: 'address' },
-      { name: '_usdc', internalType: 'address', type: 'address' },
       { name: '_roomEntryFee', internalType: 'uint256', type: 'uint256' },
       { name: '_initialAgents', internalType: 'address[]', type: 'address[]' },
-      { name: '_diamond', internalType: 'address', type: 'address' },
+      {
+        name: '_initialAgentFeeRecipients',
+        internalType: 'address[]',
+        type: 'address[]',
+      },
+      {
+        name: '_initialAgentIds',
+        internalType: 'uint256[]',
+        type: 'uint256[]',
+      },
     ],
     name: 'initialize',
     outputs: [],
@@ -2510,21 +2227,7 @@ export const roomAbi = [
     ],
     name: 'invokePvpAction',
     outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: '', internalType: 'address', type: 'address' }],
-    name: 'isAgent',
-    outputs: [{ name: '', internalType: 'bool', type: 'bool' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'joinRoom',
-    outputs: [],
-    stateMutability: 'nonpayable',
+    stateMutability: 'payable',
   },
   {
     type: 'function',
@@ -2542,13 +2245,6 @@ export const roomAbi = [
   },
   {
     type: 'function',
-    inputs: [{ name: '', internalType: 'bytes', type: 'bytes' }],
-    name: 'performUpKeep',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
     inputs: [
       { name: 'agent', internalType: 'address', type: 'address' },
       { name: 'betType', internalType: 'enum Room.BetType', type: 'uint8' },
@@ -2556,7 +2252,7 @@ export const roomAbi = [
     ],
     name: 'placeBet',
     outputs: [],
-    stateMutability: 'nonpayable',
+    stateMutability: 'payable',
   },
   {
     type: 'function',
@@ -2588,13 +2284,6 @@ export const roomAbi = [
   },
   {
     type: 'function',
-    inputs: [{ name: '', internalType: 'address', type: 'address' }],
-    name: 'roomParticipants',
-    outputs: [{ name: '', internalType: 'bool', type: 'bool' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
     inputs: [],
     name: 'roundDuration',
     outputs: [{ name: '', internalType: 'uint40', type: 'uint40' }],
@@ -2617,6 +2306,15 @@ export const roomAbi = [
   },
   {
     type: 'function',
+    inputs: [
+      { name: 'newState', internalType: 'enum Room.RoundState', type: 'uint8' },
+    ],
+    name: 'setCurrentRoundState',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     inputs: [],
     name: 'startRound',
     outputs: [],
@@ -2631,6 +2329,29 @@ export const roomAbi = [
     name: 'submitAgentDecision',
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: '', internalType: 'string', type: 'string' }],
+    name: 'supportedPvpActions',
+    outputs: [
+      { name: 'verb', internalType: 'string', type: 'string' },
+      {
+        name: 'category',
+        internalType: 'enum Room.PvpActionCategory',
+        type: 'uint8',
+      },
+      { name: 'fee', internalType: 'uint256', type: 'uint256' },
+      { name: 'duration', internalType: 'uint32', type: 'uint32' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
+    name: 'supportedPvpVerbs',
+    outputs: [{ name: '', internalType: 'string', type: 'string' }],
+    stateMutability: 'view',
   },
   {
     type: 'function',
@@ -2649,17 +2370,6 @@ export const roomAbi = [
   {
     type: 'function',
     inputs: [
-      { name: 'agent', internalType: 'address', type: 'address' },
-      { name: 'newBetType', internalType: 'enum Room.BetType', type: 'uint8' },
-      { name: 'newAmount', internalType: 'uint256', type: 'uint256' },
-    ],
-    name: 'updateBet',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [
       { name: 'roomEntryFee', internalType: 'uint256', type: 'uint256' },
     ],
     name: 'updateFees',
@@ -2670,6 +2380,22 @@ export const roomAbi = [
     type: 'function',
     inputs: [{ name: 'newDuration', internalType: 'uint40', type: 'uint40' }],
     name: 'updateRoundDuration',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'verb', internalType: 'string', type: 'string' },
+      {
+        name: 'category',
+        internalType: 'enum Room.PvpActionCategory',
+        type: 'uint8',
+      },
+      { name: 'fee', internalType: 'uint256', type: 'uint256' },
+      { name: 'duration', internalType: 'uint32', type: 'uint32' },
+    ],
+    name: 'updateSupportedPvpActions',
     outputs: [],
     stateMutability: 'nonpayable',
   },
@@ -2766,38 +2492,6 @@ export const roomAbi = [
         type: 'uint256',
         indexed: true,
       },
-      { name: 'user', internalType: 'address', type: 'address', indexed: true },
-      {
-        name: 'agent',
-        internalType: 'address',
-        type: 'address',
-        indexed: false,
-      },
-      {
-        name: 'newbetType',
-        internalType: 'enum Room.BetType',
-        type: 'uint8',
-        indexed: false,
-      },
-      {
-        name: 'newamount',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: false,
-      },
-    ],
-    name: 'BetUpdated',
-  },
-  {
-    type: 'event',
-    anonymous: false,
-    inputs: [
-      {
-        name: 'roundId',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: true,
-      },
     ],
     name: 'FeesDistributed',
   },
@@ -2845,40 +2539,6 @@ export const roomAbi = [
     type: 'event',
     anonymous: false,
     inputs: [
-      { name: 'user', internalType: 'address', type: 'address', indexed: true },
-      {
-        name: 'roundId',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: true,
-      },
-    ],
-    name: 'MessageInjected',
-  },
-  {
-    type: 'event',
-    anonymous: false,
-    inputs: [
-      { name: 'user', internalType: 'address', type: 'address', indexed: true },
-      {
-        name: 'roundId',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: true,
-      },
-      {
-        name: 'agent',
-        internalType: 'address',
-        type: 'address',
-        indexed: true,
-      },
-    ],
-    name: 'MutedForaMinute',
-  },
-  {
-    type: 'event',
-    anonymous: false,
-    inputs: [
       {
         name: 'previousOwner',
         internalType: 'address',
@@ -2893,6 +2553,63 @@ export const roomAbi = [
       },
     ],
     name: 'OwnershipTransferred',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      { name: 'verb', internalType: 'string', type: 'string', indexed: true },
+      {
+        name: 'target',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      {
+        name: 'endTime',
+        internalType: 'uint40',
+        type: 'uint40',
+        indexed: false,
+      },
+      {
+        name: 'parameters',
+        internalType: 'bytes',
+        type: 'bytes',
+        indexed: false,
+      },
+    ],
+    name: 'PvpActionInvoked',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      { name: 'verb', internalType: 'string', type: 'string', indexed: true },
+    ],
+    name: 'PvpActionRemoved',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      { name: 'verb', internalType: 'string', type: 'string', indexed: true },
+      {
+        name: 'category',
+        internalType: 'enum Room.PvpActionCategory',
+        type: 'uint8',
+        indexed: true,
+      },
+      { name: 'fee', internalType: 'uint256', type: 'uint256', indexed: false },
+      {
+        name: 'duration',
+        internalType: 'uint32',
+        type: 'uint32',
+        indexed: false,
+      },
+      { name: 'isNew', internalType: 'bool', type: 'bool', indexed: false },
+      { name: 'isUpdate', internalType: 'bool', type: 'bool', indexed: false },
+    ],
+    name: 'PvpActionsUpdated',
   },
   {
     type: 'event',
@@ -2988,18 +2705,21 @@ export const roomAbi = [
     name: 'OwnableUnauthorizedAccount',
   },
   { type: 'error', inputs: [], name: 'ReentrancyGuardReentrantCall' },
+  { type: 'error', inputs: [], name: 'Room_ActionNotSupported' },
+  { type: 'error', inputs: [], name: 'Room_AgentAlreadyDecided' },
   { type: 'error', inputs: [], name: 'Room_AgentAlreadyExists' },
   {
     type: 'error',
     inputs: [{ name: 'agent', internalType: 'address', type: 'address' }],
     name: 'Room_AgentNotActive',
   },
-  { type: 'error', inputs: [], name: 'Room_AlreadyParticipant' },
-  { type: 'error', inputs: [], name: 'Room_InsufficientBalance' },
-  { type: 'error', inputs: [], name: 'Room_InvalidAgents' },
+  {
+    type: 'error',
+    inputs: [{ name: 'agent', internalType: 'address', type: 'address' }],
+    name: 'Room_AgentNotExists',
+  },
   { type: 'error', inputs: [], name: 'Room_InvalidAmount' },
   { type: 'error', inputs: [], name: 'Room_InvalidBetType' },
-  { type: 'error', inputs: [], name: 'Room_InvalidDuration' },
   { type: 'error', inputs: [], name: 'Room_InvalidFee' },
   { type: 'error', inputs: [], name: 'Room_InvalidPvpAction' },
   { type: 'error', inputs: [], name: 'Room_InvalidRoundDuration' },
@@ -3009,28 +2729,6 @@ export const roomAbi = [
   { type: 'error', inputs: [], name: 'Room_NotCreator' },
   { type: 'error', inputs: [], name: 'Room_NotGameMaster' },
   { type: 'error', inputs: [], name: 'Room_NotGameMasterOrCreator' },
-  { type: 'error', inputs: [], name: 'Room_NotParticipant' },
-  {
-    type: 'error',
-    inputs: [{ name: 'roundId', internalType: 'uint256', type: 'uint256' }],
-    name: 'Room_RoundActive',
-  },
-  {
-    type: 'error',
-    inputs: [
-      {
-        name: 'roundState',
-        internalType: 'enum Room.RoundState',
-        type: 'uint8',
-      },
-    ],
-    name: 'Room_RoundInactive',
-  },
-  {
-    type: 'error',
-    inputs: [{ name: 'roundId', internalType: 'uint256', type: 'uint256' }],
-    name: 'Room_RoundNotActive',
-  },
   {
     type: 'error',
     inputs: [
@@ -3038,7 +2736,16 @@ export const roomAbi = [
     ],
     name: 'Room_RoundNotClosed',
   },
-  { type: 'error', inputs: [], name: 'Room_RoundNotProcessing' },
+  {
+    type: 'error',
+    inputs: [
+      { name: 'expected', internalType: 'enum Room.RoundState', type: 'uint8' },
+      { name: 'actual', internalType: 'enum Room.RoundState', type: 'uint8' },
+    ],
+    name: 'Room_RoundNotExpectedStatus',
+  },
+  { type: 'error', inputs: [], name: 'Room_SenderAlreadyClaimedWinnings' },
+  { type: 'error', inputs: [], name: 'Room_SenderHasNoBetInRound' },
   {
     type: 'error',
     inputs: [
