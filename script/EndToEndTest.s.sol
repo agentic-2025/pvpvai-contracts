@@ -25,6 +25,10 @@ contract EndToEndTest is Script {
     address public TARGET_1;
     address public TARGET_2;
     address public TARGET_3;
+    
+    //token address
+    address public token = 0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196;
+
 
     // Add fee constants
     uint256 constant STATUS_EFFECT_FEE = 0.0002 ether;
@@ -43,40 +47,31 @@ contract EndToEndTest is Script {
 
         // Load accounts from environment with verification
         account1Key = vm.envUint("ACCOUNT1_PRIVATE_KEY");
+        account1 = vm.addr(account1Key);
         account2Key = vm.envUint("ACCOUNT2_PRIVATE_KEY");
+        account2 = vm.addr(account2Key);
         account3Key = vm.envUint("ACCOUNT3_PRIVATE_KEY");
+        account3 = vm.addr(account3Key);
 
         console2.log("Account keys loaded:");
         console2.log("Account1 key present:", account1Key != 0);
         console2.log("Account2 key present:", account2Key != 0);
         console2.log("Account3 key present:", account3Key != 0);
+        
 
-        account1 = vm.addr(account1Key);
-        account2 = vm.addr(account2Key);
-        account3 = vm.addr(account3Key);
+        
+        
+        
+        console2.log("Account1 address:", account1);
+console2.log("Account2 address:", account2);
+console2.log("Account3 address:", account3);
     }
 
     function run() public {
         // === SETUP PHASE ===
         console2.log("\n=== Starting Setup Phase ===\n");
 
-        // 1. Deploy MockUSDC first
-        vm.broadcast(deployer);
-        usdc = new MockUSDC();
-        console2.log("MockUSDC deployed at:", address(usdc));
-
-        // Mint USDC to all accounts (1000 USDC each)
-        uint256 mintAmount = 1000 * 10 ** 6; // 1000 USDC with 6 decimals
-
-        vm.broadcast(deployer);
-        usdc.mint(deployer, mintAmount);
-        vm.broadcast(deployer);
-        usdc.mint(account1, mintAmount);
-        vm.broadcast(deployer);
-        usdc.mint(account2, mintAmount);
-        vm.broadcast(deployer);
-        usdc.mint(account3, mintAmount);
-
+       
         // 2. Deploy Core contract
         vm.broadcast(deployer);
         core = new Core(address(usdc));
@@ -92,17 +87,29 @@ contract EndToEndTest is Script {
         console2.log("Room creation fee:", roomFee);
         console2.log("Agent creation fee:", agentFee);
 
+       
+
+
         // 4. Deposit fees for accounts
-        vm.broadcast(account1);
+        vm.startBroadcast(vm.envUint("ACCOUNT1_PRIVATE_KEY"));
         core.deposit{value: agentFee * 2}();
-        vm.broadcast(account2);
+        vm.stopBroadcast();
+
+        vm.startBroadcast(vm.envUint("ACCOUNT2_PRIVATE_KEY"));
         core.deposit{value: agentFee}();
-        vm.broadcast(account3);
+        vm.stopBroadcast();
+
+        vm.startBroadcast(vm.envUint("ACCOUNT3_PRIVATE_KEY"));
         core.deposit{value: agentFee}();
-        vm.broadcast(account1);
+        vm.stopBroadcast();
+
+        vm.startBroadcast(vm.envUint("ACCOUNT1_PRIVATE_KEY"));
         core.deposit{value: roomFee}();
+        vm.stopBroadcast();
 
         // 5. Create agents
+        console2.log("balance of deployer:",deployer.balance );
+        console2.log("balance of account1 :", account1.balance);
         vm.broadcast(deployer);
         core.createAgent{value: agentFee}(account1, 1);
         vm.broadcast(deployer);
@@ -139,16 +146,19 @@ contract EndToEndTest is Script {
         agentIds[1] = 2;
         agentIds[2] = 3;
 
+
         vm.broadcast(deployer);
         address roomAddress = core.createRoom(
             deployer, account1, address(usdc), agentWallets, feeRecipients, agentIds, address(roomImplementation)
         );
 
         room = Room(payable(roomAddress));
+
         console2.log("Room created at:", roomAddress);
 
         // Initialize PvP actions
         vm.startBroadcast(deployer);
+
         room.updateSupportedPvpActions("silence", Room.PvpActionCategory.STATUS_EFFECT, STATUS_EFFECT_FEE, 30);
         room.updateSupportedPvpActions("deafen", Room.PvpActionCategory.STATUS_EFFECT, STATUS_EFFECT_FEE, 30);
         room.updateSupportedPvpActions("poison", Room.PvpActionCategory.STATUS_EFFECT, POISON_FEE, 30);
@@ -201,31 +211,102 @@ contract EndToEndTest is Script {
             vm.stopBroadcast();
             return;
         }
+        vm.stopBroadcast();
 
         // Place bet
-        uint256 betAmount = 0.0005 ether;
-        console2.log("Placing bet on agent:", firstAgent);
-        room.placeBet{value: betAmount}(firstAgent, Room.BetType.BUY, betAmount);
-        console2.log("Initial bet placed");
+        vm.startBroadcast(account1Key);
+    uint256 betAmount1 = 0.001 ether;
+    room.placeBet{value: betAmount1}(TARGET_1, Room.BetType.BUY, betAmount1);
+    console2.log("Account1 placed bet on TARGET_1:", betAmount1);
+    vm.stopBroadcast();
 
-        // Test PvP actions
-        console2.log("\n=== Testing PvP Actions ===\n");
-        dumpPvPState(room, room.currentRoundId());
+    vm.startBroadcast(account2Key);
+    uint256 betAmount2 = 0.002 ether;
+    room.placeBet{value: betAmount2}(TARGET_2, Room.BetType.BUY, betAmount2);
+    console2.log("Account2 placed bet on TARGET_2:", betAmount2);
+    vm.stopBroadcast();
 
-        try room.invokePvpAction{value: STATUS_EFFECT_FEE}(TARGET_1, "silence", "") {
-            console2.log("Silence action succeeded");
-        } catch Error(string memory reason) {
-            console2.log("Error invoking silence:", reason);
-        }
+    // Modify a bet
+    vm.startBroadcast(account1Key);
+    try room.placeBet(TARGET_1, Room.BetType.SELL, betAmount1 / 2) {
+        console2.log("Account1 modified bet on TARGET_1");
+    } catch Error(string memory reason) {
+        console2.log("Failed to modify bet:", reason);
+    }
+    vm.stopBroadcast();
 
-        dumpPvPState(room, room.currentRoundId());
+    // Display current bets
+    console2.log("\n=== Current Bets ===");
+    dumpBetState(room, room.currentRoundId());
 
-        room.invokePvpAction{value: STATUS_EFFECT_FEE}(TARGET_2, "deafen", "");
-        bytes memory poisonParams = bytes('{"find": "nice", "replace": "terrible", "caseSensitive": false}');
-        room.invokePvpAction{value: POISON_FEE}(TARGET_1, "poison", poisonParams);
+   // Fast forward time to end of round
+    vm.warp(block.timestamp + 10 seconds);
+    console2.log("\n=== Round Duration Complete ===");
+    
+    // GameMaster changes round state
+    vm.startBroadcast(deployerKey);
+    room.changeRoundState(Room.RoundState.PROCESSING);
+    console2.log("Round state changed to PROCESSING");
+    vm.stopBroadcast();
 
-        console2.log("End-to-end test completed");
-        vm.stopBroadcast();
+    // Submit agent decisions
+    vm.startBroadcast(deployerKey);
+    room.submitAgentDecision(TARGET_1, Room.BetType.SELL);
+    console2.log("Agent decision submitted for TARGET_1: SELL");
+
+    room.submitAgentDecision(TARGET_2, Room.BetType.BUY);
+    console2.log("Agent decision submitted for TARGET_2: BUY");
+
+    room.submitAgentDecision(TARGET_3, Room.BetType.HOLD);
+    console2.log("Agent decision submitted for TARGET_3: HOLD");
+    vm.stopBroadcast();
+
+    // GameMaster resolves market
+    vm.startBroadcast(deployerKey);
+    room.resolveMarket();
+    console2.log("Market resolved successfully");
+    vm.stopBroadcast();
+
+    // Try claiming winnings
+    vm.startBroadcast(account1Key);
+    try room.claim(room.roundId()) {
+        console2.log("Account1 claimed winnings successfully");
+    } catch Error(string memory reason) {
+        console2.log("Account1 failed to claim:", reason);
+    }
+    vm.stopBroadcast();
+
+    vm.startBroadcast(account2Key);
+    try room.claim(room.roundId()) {
+        console2.log("Account2 claimed winnings successfully");
+    } catch Error(string memory reason) {
+        console2.log("Account2 failed to claim:", reason);
+    }
+    vm.stopBroadcast();
+
+    // Check final balances
+    console2.log("\n=== Final Balances ===");
+    console2.log("Account1 balance:", account1.balance);
+    console2.log("Account2 balance:", account2.balance);
+
+    // Test PvP actions
+    console2.log("\n=== Testing PvP Actions ===\n");
+    dumpPvPState(room, room.currentRoundId());
+
+    try room.invokePvpAction{value: STATUS_EFFECT_FEE}(TARGET_1, "silence", "") {
+        console2.log("Silence action succeeded");
+    } catch Error(string memory reason) {
+        console2.log("Error invoking silence:", reason);
+    }
+
+    dumpPvPState(room, room.currentRoundId());
+
+    room.invokePvpAction{value: STATUS_EFFECT_FEE}(TARGET_2, "deafen", "");
+    bytes memory poisonParams = bytes('{"find": "nice", "replace": "terrible", "caseSensitive": false}');
+    room.invokePvpAction{value: POISON_FEE}(TARGET_1, "poison", poisonParams);
+
+    console2.log("pvp actions test complete");
+    vm.stopBroadcast();
     }
 
     function dumpPvPState(Room _room, uint256 roundId) internal view {
@@ -272,4 +353,24 @@ contract EndToEndTest is Script {
             }
         }
     }
+    function dumpBetState(Room _room, uint256 roundId) internal view {
+    address[3] memory targets = [TARGET_1, TARGET_2, TARGET_3];
+    string[3] memory targetNames = ["TARGET_1", "TARGET_2", "TARGET_3"];
+
+    for (uint256 t = 0; t < targets.length; t++) {
+        console2.log("\nBets for", targetNames[t]);
+        
+        // Get total bets
+        (uint256 buyAmount, uint256 sellAmount, uint256 holdAmount) = _room.getTotalBets(roundId, targets[t]);
+        console2.log("Total Buy Amount:", buyAmount);
+        console2.log("Total Sell Amount:", sellAmount);
+
+        // Try to get specific account bets
+        //(uint256 account1Buy, uint256 account1Sell) = _room.getUserBet( targets[t], account1);
+        //(uint256 account2Buy, uint256 account2Sell) = _room.getUserBet( targets[t], account2);
+        
+        //console2.log("Account1 Bets - Buy:", account1Buy, "Sell:", account1Sell);
+        //console2.log("Account2 Bets - Buy:", account2Buy, "Sell:", account2Sell);
+    }
+}
 }

@@ -53,7 +53,7 @@ contract Core is Ownable, ReentrancyGuard {
     address public dao;
     uint32 public maxAgentsPerRoom = 5;
     uint256 public constant MAX_FEE_RATE = 1000;
-    uint256 public constant BASIS_POINTS = 1000;
+    uint256 public constant BASIS_POINTS = 10000;
     FeeStructure public fees;
     mapping(address => RoomStructure) public rooms;
     mapping(uint256 => Agent) public agents;
@@ -84,7 +84,7 @@ contract Core is Ownable, ReentrancyGuard {
         fees = FeeStructure({
             agentCreationFee: 0.002 ether,
             roomCreationFee: 0.001 ether,
-            roomCreatorCut: 1000,
+            roomCreatorCut: 100,
             agentCreatorCut: 200,
             daoCut: 200 //platform fee/ dao fee
         });
@@ -104,6 +104,7 @@ contract Core is Ownable, ReentrancyGuard {
         }
 
         // Check that the agentId is not already in use
+
         if (agents[agentId].creator != address(0)) {
             revert Core__AgentAlreadyExists(agentId);
         }

@@ -418,24 +418,45 @@ contract Room is Ownable, ReentrancyGuard {
         uint256 totalFees = round.totalFees;
 
         (,, uint256 roomCreatorPercent, uint256 agentCreatorPercent, uint256 daoPercent) = Core(payable(core)).getFees();
-
         uint256 basisPoint = Core(payable(core)).BASIS_POINTS();
 
+        // Calculate cuts based on percentages (assuming BASIS_POINTS is 1000)
+        // Creator: 2% = 20
+        // Agent Creator: 2% = 20 
+        // DAO: 1% = 10
         uint256 roomCreatorCut = (totalFees * roomCreatorPercent) / basisPoint;
         uint256 agentCreatorCut = (totalFees * agentCreatorPercent) / basisPoint;
+        uint256 daoCut = (totalFees * daoPercent) / basisPoint;
 
+        // Send room creator's cut
         (bool success1,) = payable(creator).call{value: roomCreatorCut}("");
         if (!success1) revert Room_TransferFailed();
 
-        uint256 agentCreatorShare = agentCreatorCut / 5;
+        // Calculate agent creator share (divide equally among agents)
+        uint256 agentCount = activeAgents.length;
+        if (agentCount > 0) {
+            uint256 agentCreatorShare = agentCreatorCut / agentCount;
+            for (uint256 i = 0; i < agentCount; i++) {
+                address agent = activeAgents[i];
+                address feeRecipient = agentData[agent].feeRecipient;
+                if (feeRecipient != address(0)) {
+                    (bool success,) = payable(feeRecipient).call{value: agentCreatorShare}("");
+                    if (!success) revert Room_TransferFailed();
+                }
+            }
+        }
 
-        uint256 totalDistributed = roomCreatorCut + (agentCreatorShare * 5);
-        uint256 dust = totalFees - totalDistributed - daoPercent;
+        // Send DAO cut
         address dao = Core(payable(core)).dao();
-        (bool success2,) = payable(dao).call{value: daoPercent + dust}("");
+        (bool success2,) = payable(dao).call{value: daoCut}("");
         if (!success2) revert Room_TransferFailed();
 
         emit FeesDistributed(roundId);
+    }
+    function getTotalBets(uint256 roundId, address agent) public view returns (uint256 buyAmount,uint256 sellAmount, uint256 holfAmount){
+        Round storage round = rounds[roundId];
+        AgentPosition storage position = round.agentPositions[agent];
+        return (position.buyPool, position.sell, position.hold);
     }
 
     function getRoomFees() public view returns (RoomFees memory) {
@@ -545,6 +566,12 @@ contract Room is Ownable, ReentrancyGuard {
 
     function getPvpStatuses(uint256 roundId, address agent) public view returns (PvpStatus[] memory) {
         return rounds[roundId].pvpStatuses[agent];
+    }
+    
+    function changeRoundState(RoundState newState) public onlyGameMaster {
+        Round storage round = rounds[currentRoundId];
+        round.state = newState;
+        emit RoundStateUpdated(currentRoundId, newState);
     }
 
     receive() external payable {}
