@@ -229,58 +229,11 @@ contract EndToEndTest is Script {
         // Display current bets
         console2.log("\n=== Current Bets ===");
         dumpBetState(room, room.currentRoundId());
+        vm.stopBroadcast();
 
-        // Fast forward time to end of round
-        // vm.warp(block.timestamp + 30 seconds);
-        // console2.log("\n=== Round Duration Complete ===");
+        
 
-        // // GameMaster changes round state
-        // vm.startBroadcast(deployerKey);
-        // room.changeRoundState(Room.RoundState.PROCESSING);
-        // console2.log("Round state changed to PROCESSING");
-        // vm.stopBroadcast();
-
-        // // Submit agent decisions
-        // vm.startBroadcast(deployerKey);
-        // room.submitAgentDecision(TARGET_1, Room.BetType.SELL);
-        // console2.log("Agent decision submitted for TARGET_1: SELL");
-
-        // room.submitAgentDecision(TARGET_2, Room.BetType.BUY);
-        // console2.log("Agent decision submitted for TARGET_2: BUY");
-
-        // room.submitAgentDecision(TARGET_3, Room.BetType.HOLD);
-        // console2.log("Agent decision submitted for TARGET_3: HOLD");
-        // vm.stopBroadcast();
-
-        // GameMaster resolves market
-        // vm.startBroadcast(deployerKey);
-        // room.resolveMarket();
-        // console2.log("Market resolved successfully");
-        // vm.stopBroadcast();
-
-        // // Try claiming winnings
-        // vm.startBroadcast(account1Key);
-        // try room.claim(room.roundId()) {
-        //     console2.log("Account1 claimed winnings successfully");
-        // } catch Error(string memory reason) {
-        //     console2.log("Account1 failed to claim:", reason);
-        // }
-        // vm.stopBroadcast();
-
-        // vm.startBroadcast(account2Key);
-        // try room.claim(room.roundId()) {
-        //     console2.log("Account2 claimed winnings successfully");
-        // } catch Error(string memory reason) {
-        //     console2.log("Account2 failed to claim:", reason);
-        // }
-        // vm.stopBroadcast();
-
-        // Check final balances
-        console2.log("\n=== Final Balances ===");
-        console2.log("Account1 balance:", account1.balance);
-        console2.log("Account2 balance:", account2.balance);
-
-        // Test PvP actions
+        // Test PvP actions before closing the round
         console2.log("\n=== Testing PvP Actions ===\n");
         dumpPvPState(room, room.currentRoundId());
 
@@ -297,7 +250,70 @@ contract EndToEndTest is Script {
         room.invokePvpAction{value: POISON_FEE}(TARGET_1, "poison", poisonParams);
 
         console2.log("pvp actions test complete");
+        // Fast forward time to end of round
+         vm.warp(block.timestamp + 30 seconds);
+        // console2.log("\n=== Round Duration Complete ===");
+
+        // Now change round state and resolve market
+        vm.startBroadcast(deployerKey);
+        room.changeRoundState(Room.RoundState.PROCESSING);
+        console2.log("Round state changed to PROCESSING");
         vm.stopBroadcast();
+
+        // Submit agent decisions
+        vm.startBroadcast(deployerKey);
+        room.submitAgentDecision(TARGET_1, Room.BetType.SELL);
+        console2.log("Agent decision submitted for TARGET_1: SELL");
+
+        room.submitAgentDecision(TARGET_2, Room.BetType.BUY);
+        console2.log("Agent decision submitted for TARGET_2: BUY");
+
+        room.submitAgentDecision(TARGET_3, Room.BetType.HOLD);
+        console2.log("Agent decision submitted for TARGET_3: HOLD");
+        vm.stopBroadcast();
+
+        // Change status to closed
+        vm.startBroadcast(deployerKey);
+        room.changeRoundState(Room.RoundState.CLOSED);
+        console2.log("Round state changed to CLOSED");
+        vm.stopBroadcast();
+
+        // GameMaster resolves market
+         vm.startBroadcast(deployerKey);
+         room.resolveMarket();
+         console2.log("Market resolved successfully");
+         vm.stopBroadcast();
+
+        // After resolving the market
+        vm.startBroadcast(deployerKey);
+        console2.log("\n=== Market Resolution Status ===");
+        console2.log("Round state after resolution:", uint8(room.getRoundState(room.currentRoundId())));
+        dumpBetState(room, room.currentRoundId());
+        vm.stopBroadcast();
+
+        // Before claiming winnings, add debug logs
+        console2.log("\n=== Checking Round Results ===");
+        console2.log("Round ID:", room.currentRoundId());
+        console2.log("Round State:", uint8(room.getRoundState(room.currentRoundId())));
+
+        // Check agent decisions
+        address[] memory agents = new address[](3);
+        agents[0] = TARGET_1;
+        agents[1] = TARGET_2;
+        agents[2] = TARGET_3;
+
+        for (uint256 i = 0; i < agents.length; i++) {
+            Room.AgentPosition memory position = room.getAgentPosition(room.currentRoundId(), agents[i]);
+            console2.log("Agent decision:", i + 1, uint8(position.decision));
+        }
+
+        // Check if accounts have any winnings
+        uint256 account1Winnings = room.calculateWinnings(room.currentRoundId(), account1);
+        uint256 account2Winnings = room.calculateWinnings(room.currentRoundId(), account2);
+
+        console2.log("Account1 winnings:", account1Winnings);
+        console2.log("Account2 winnings:", account2Winnings);
+        //vm.stopBroadcast();
     }
 
     function dumpPvPState(Room _room, uint256 roundId) internal view {
