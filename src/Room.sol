@@ -307,31 +307,35 @@ contract Room is Ownable, ReentrancyGuard {
         Round storage round = rounds[roundId];
         uint256 totalWinnings = 0;
 
-        for (uint256 i; i < maxAgents; i++) {
+        for (uint256 i = 0; i < activeAgents.length; i++) {
             address agent = activeAgents[i];
             AgentPosition storage position = round.agentPositions[agent];
-
             UserBet storage userBet = round.bets[user];
 
             if (position.hasDecided && userBet.bettype == position.decision) {
                 uint256 winningPool;
-                uint256 totalPool = position.buyPool + position.hold;
+                uint256 totalPool = position.buyPool + position.hold + position.sell;
 
                 if (userBet.bettype == BetType.BUY) {
                     winningPool = position.buyPool;
-                } else {
+                } else if (userBet.bettype == BetType.HOLD) {
                     winningPool = position.hold;
+                } else if (userBet.bettype == BetType.SELL) {
+                    winningPool = position.sell;
                 }
+
                 if (winningPool > 0) {
                     totalWinnings += (userBet.amount * totalPool) / winningPool;
                 }
-            } else {
-                totalWinnings += userBet.amount;
-            }
-            unchecked {
-                ++i;
             }
         }
+
+        // If no winnings calculated, return original bet amount
+        if (totalWinnings == 0) {
+            UserBet storage userBet = round.bets[user];
+            totalWinnings = userBet.amount;
+        }
+
         return totalWinnings;
     }
 
