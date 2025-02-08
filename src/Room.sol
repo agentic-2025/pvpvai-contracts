@@ -10,26 +10,23 @@ contract Room is Ownable, ReentrancyGuard {
     error Room_RoundNotClosed(uint256 currentRoundId);
     error Room_SenderAlreadyClaimedWinnings();
     error Room_SenderHasNoBetInRound();
-    error Room_AgentNotActive(address agent);
+    error Room_AgentNotActive();
     error Room_InvalidAmount();
     error Room_NoWinnings();
     error Room_InvalidBetType();
     error Room_RoundNotExpectedStatus(RoundState expected, RoundState actual);
     error Room_NotGameMaster();
-    error Room_NotCreator();
-    error Room_NotGameMasterOrCreator();
     error Room_MaxAgentsReached();
+    error Room_AgentNotExists();
     error Room_AgentAlreadyExists();
     error Room_InvalidRoundDuration();
     error Room_InvalidPvpAction();
-    error Room_InvalidFee();
     error Room_TransferFailed();
     error Room_NotAuthorized();
     error Room_StatusEffectAlreadyActive(string verb, address target, uint40 endTime);
     error Room__AlreadyInitialized();
     error Room_ActionNotSupported();
     error Room_AgentAlreadyDecided();
-    error Room_AgentNotExists(address agent);
 
     enum BetType {
         NONE,
@@ -146,16 +143,6 @@ contract Room is Ownable, ReentrancyGuard {
         _;
     }
 
-    modifier onlyCreator() {
-        if (msg.sender != creator) revert Room_NotCreator();
-        _;
-    }
-
-    modifier onlyGameMasterOrCreator() {
-        if (msg.sender != gameMaster && msg.sender != creator) revert Room_NotGameMasterOrCreator();
-        _;
-    }
-
     bool private initialized;
 
     modifier onlyCore() {
@@ -198,15 +185,15 @@ contract Room is Ownable, ReentrancyGuard {
         round.state = RoundState.ACTIVE;
     }
 
-    function addAgent(address agent) public onlyGameMasterOrCreator {
+    function addAgent(address agent) public onlyGameMaster {
         if (activeAgents.length >= maxAgents) revert Room_MaxAgentsReached();
         if (agentData[agent].feeRecipient != address(0)) revert Room_AgentAlreadyExists();
         activeAgents.push(agent);
         emit AgentAdded(agent);
     }
 
-    function removeAgent(address agent) public onlyGameMasterOrCreator {
-        if (agentData[agent].feeRecipient == address(0)) revert Room_AgentNotExists(agent);
+    function removeAgent(address agent) public onlyGameMaster {
+        if (agentData[agent].feeRecipient == address(0)) revert Room_AgentNotExists();
         agentData[agent].active = false;
         bool found = false;
         for (uint256 i; i < activeAgents.length; i++) {
@@ -217,11 +204,11 @@ contract Room is Ownable, ReentrancyGuard {
                 break;
             }
         }
-        if (!found) revert Room_AgentNotExists(agent);
+        if (!found) revert Room_AgentNotExists();
         emit AgentRemoved(agent);
     }
 
-    function updateRoundDuration(uint40 newDuration) public onlyCreator {
+    function updateRoundDuration(uint40 newDuration) public onlyGameMaster {
         uint40 oldDuration = roundDuration;
         if (newDuration < 10 seconds) revert Room_InvalidRoundDuration(); //Agents have unpredictable arch, need some time for diverse setups
         roundDuration = newDuration;
@@ -238,7 +225,7 @@ contract Room is Ownable, ReentrancyGuard {
             revert Room_RoundNotExpectedStatus(RoundState.ACTIVE, round.state);
         }
         if (agentData[agent].feeRecipient == address(0)) {
-            revert Room_AgentNotActive(agent);
+            revert Room_AgentNotActive();
         }
         if (amount <= 0) {
             revert Room_InvalidAmount();
@@ -486,7 +473,7 @@ contract Room is Ownable, ReentrancyGuard {
 
     function updateSupportedPvpActions(string memory verb, PvpActionCategory category, uint256 fee, uint32 duration)
         external
-        onlyGameMasterOrCreator
+        onlyGameMaster
     {
         bool newAction = keccak256(abi.encodePacked(supportedPvpActions[verb].verb)) == keccak256(abi.encodePacked(""));
 
@@ -575,21 +562,6 @@ contract Room is Ownable, ReentrancyGuard {
         emit RoundStateUpdated(currentRoundId, newState);
     }
 
-    function getRoomTotalBets(uint256 roundId)
-        public
-        view
-        returns (uint256 totalBuy, uint256 totalHold, uint256 totalSell)
-    {
-        Round storage round = rounds[roundId];
-        for (uint256 i = 0; i < activeAgents.length; i++) {
-            address agent = activeAgents[i];
-            AgentPosition storage position = round.agentPositions[agent];
-            totalBuy += position.buyPool;
-            totalHold += position.hold;
-            totalSell += position.sell;
-        }
-        return (totalBuy, totalHold, totalSell);
-    }
 
     function getPvpActionFee(string memory verb) public view returns (uint256) {
         return supportedPvpActions[verb].fee;
