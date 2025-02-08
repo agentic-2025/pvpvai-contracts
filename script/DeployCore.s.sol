@@ -10,7 +10,6 @@ contract DeployCore is Script {
     function run() external returns (address) {
         vm.startBroadcast();
 
-
         // Deploy Core with USDC address
         Core core = new Core(address(0)); // Replace with actual USDC address
 

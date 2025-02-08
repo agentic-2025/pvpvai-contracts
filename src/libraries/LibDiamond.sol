@@ -16,4 +16,4 @@ library LibDiamond {
             ds.slot := position
         }
     }
-} 
+}

@@ -228,13 +228,7 @@ contract Core is Ownable, ReentrancyGuard {
         console2.log("Cloned room implementation, now initializing");
         // Initialize the room with diamond address
         IRoom(newRoom).initialize(
-            gameMaster,
-            tokenAddress,
-            creator,
-            address(this),
-            roomAgentWallets,
-            roomAgentFeeRecipients,
-            roomAgentIds
+            gameMaster, tokenAddress, creator, address(this), roomAgentWallets, roomAgentFeeRecipients, roomAgentIds
         );
 
         RoomStructure memory room = RoomStructure({

@@ -31,14 +31,14 @@ contract Diamond is Ownable {
     fallback() external payable {
         address facet = selectorToFacetAndPosition[msg.sig].facetAddress;
         require(facet != address(0), "Diamond: Function does not exist");
-        
+
         assembly {
             calldatacopy(0, 0, calldatasize())
             let result := delegatecall(gas(), facet, 0, calldatasize(), 0, 0)
             returndatacopy(0, 0, returndatasize())
             switch result
-            case 0 {revert(0, returndatasize())}
-            default {return(0, returndatasize())}
+            case 0 { revert(0, returndatasize()) }
+            default { return(0, returndatasize()) }
         }
     }
 
@@ -49,7 +49,7 @@ contract Diamond is Ownable {
         require(_functionSelectors.length > 0, "Diamond: No selectors provided");
 
         FacetFunctionSelectors storage facetFunctionSelector = facetFunctionSelectors[_facetAddress];
-        
+
         // Add facet address if it's new
         if (facetFunctionSelector.functionSelectors.length == 0) {
             facetFunctionSelector.facetAddressPosition = facetAddresses.length;
@@ -59,9 +59,8 @@ contract Diamond is Ownable {
         // Add new selectors
         for (uint256 i; i < _functionSelectors.length; ++i) {
             bytes4 selector = _functionSelectors[i];
-            require(selectorToFacetAndPosition[selector].facetAddress == address(0), 
-                "Diamond: Function already exists");
-            
+            require(selectorToFacetAndPosition[selector].facetAddress == address(0), "Diamond: Function already exists");
+
             facetFunctionSelector.functionSelectors.push(selector);
             selectorToFacetAndPosition[selector] = FacetAddressAndPosition({
                 facetAddress: _facetAddress,
@@ -71,4 +70,4 @@ contract Diamond is Ownable {
 
         emit DiamondCut(_facetAddress, _functionSelectors);
     }
-} 
+}

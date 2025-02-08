@@ -231,8 +231,6 @@ contract EndToEndTest is Script {
         dumpBetState(room, room.currentRoundId());
         vm.stopBroadcast();
 
-        
-
         // Test PvP actions before closing the round
         console2.log("\n=== Testing PvP Actions ===\n");
         dumpPvPState(room, room.currentRoundId());
@@ -251,7 +249,7 @@ contract EndToEndTest is Script {
 
         console2.log("pvp actions test complete");
         // Fast forward time to end of round
-         vm.warp(block.timestamp + 30 seconds);
+        vm.warp(block.timestamp + 30 seconds);
         // console2.log("\n=== Round Duration Complete ===");
 
         // Now change round state and resolve market
@@ -279,10 +277,10 @@ contract EndToEndTest is Script {
         vm.stopBroadcast();
 
         // GameMaster resolves market
-         vm.startBroadcast(deployerKey);
-         room.resolveMarket();
-         console2.log("Market resolved successfully");
-         vm.stopBroadcast();
+        vm.startBroadcast(deployerKey);
+        room.resolveMarket();
+        console2.log("Market resolved successfully");
+        vm.stopBroadcast();
 
         // After resolving the market
         vm.startBroadcast(deployerKey);

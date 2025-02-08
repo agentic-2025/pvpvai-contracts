@@ -571,5 +571,25 @@ contract Room is Ownable, ReentrancyGuard {
         emit RoundStateUpdated(currentRoundId, newState);
     }
 
+    function getRoomTotalBets(uint256 roundId)
+        public
+        view
+        returns (uint256 totalBuy, uint256 totalHold, uint256 totalSell)
+    {
+        Round storage round = rounds[roundId];
+        for (uint256 i = 0; i < activeAgents.length; i++) {
+            address agent = activeAgents[i];
+            AgentPosition storage position = round.agentPositions[agent];
+            totalBuy += position.buyPool;
+            totalHold += position.hold;
+            totalSell += position.sell;
+        }
+        return (totalBuy, totalHold, totalSell);
+    }
+
+    function getPvpActionFee(string memory verb) public view returns (uint256) {
+        return supportedPvpActions[verb].fee;
+    }
+
     receive() external payable {}
 }
