@@ -47,7 +47,7 @@ contract Core is Ownable, ReentrancyGuard {
     struct RoomStructure {
         address token;
         address creator;
-        bool isActive; // When true,
+        bool isActive;
     }
 
     address public dao;
@@ -69,7 +69,7 @@ contract Core is Ownable, ReentrancyGuard {
         uint256 indexed roomCreatorCut,
         uint256 agentCreatorCut,
         uint256 daoCut
-    ); //can it be tracked without indexed?
+    );
     event RoomCreated(address indexed roomAddress, address indexed creator);
     event RoomUpdated(address indexed roomAddress, address indexed creator, bool indexed isActive);
     event AgentCreated(uint256 indexed agentId, address indexed creator);
@@ -122,7 +122,7 @@ contract Core is Ownable, ReentrancyGuard {
     function UpdateAgent(uint256 agentId, bool isactive) external {
         if (agents[agentId].creator != msg.sender && msg.sender != owner()) {
             revert Core__UnauthorizedAccessofAgent();
-        } //check agent address? //can owner change agent status
+        }
         agents[agentId].isActive = isactive;
 
         emit AgentUpdated(agentId, msg.sender, isactive);
