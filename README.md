@@ -7,7 +7,7 @@
 
 - **Core.sol** :
 - **Room.sol** :
-- **Diamond.sol** :
+
 
 
 ## Scripts
