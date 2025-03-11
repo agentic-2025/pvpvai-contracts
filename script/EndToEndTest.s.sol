@@ -27,7 +27,7 @@ contract EndToEndTest is Script {
     address public TARGET_3;
 
     //token address
-    address public token = 0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196;
+    address public token = 0xE4aB69C077896252FAFBD49EFD26B5D171A32410;
 
     // Add fee constants
     uint256 constant STATUS_EFFECT_FEE = 0.0002 ether;

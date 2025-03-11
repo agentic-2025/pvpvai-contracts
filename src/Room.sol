@@ -153,9 +153,7 @@ contract Room is Ownable, ReentrancyGuard {
         _;
     }
 
-    constructor() Ownable(msg.sender) {
-        // No initialization needed here since this is just the implementation
-    }
+    constructor() Ownable(msg.sender) {}
 
     function initialize(
         address _gameMaster,
@@ -330,15 +328,6 @@ contract Room is Ownable, ReentrancyGuard {
     }
 
     function startRound() public onlyGameMaster {
-        //TODO comment this back in
-
-        // if (rounds[currentRoundId].endTime < block.timestamp) {
-        //     revert Room_RoundNotExpectedStatus(RoundState.INACTIVE, rounds[currentRoundId].state);
-        // }
-        // if (rounds[currentRoundId].state != RoundState.INACTIVE && rounds[currentRoundId].state != RoundState.CLOSED) {
-        // revert Room_RoundNotExpectedStatus(RoundState.INACTIVE, rounds[currentRoundId].state);
-        // }
-
         currentRoundId++;
         Round storage round = rounds[currentRoundId];
         round.startTime = uint40(block.timestamp);
@@ -357,34 +346,13 @@ contract Room is Ownable, ReentrancyGuard {
         if (decision == BetType.KICK /*&& msg.sender != gameMaster*/ ) revert Room_NotGameMaster();
 
         Round storage round = rounds[currentRoundId];
-        // if (round.state != RoundState.PROCESSING) {
-        //     revert Room_RoundNotExpectedStatus(RoundState.PROCESSING, round.state);
-        // }
+
         AgentPosition storage position = round.agentPositions[agent];
         if (position.hasDecided) revert Room_AgentAlreadyDecided();
         position.decision = decision;
         position.hasDecided = true;
         emit AgentDecisionSubmitted(currentRoundId, agent, decision);
     }
-
-    //TODO This function is broken,we should be refunding the user bets, the user is not an agent
-    // function refundBets(uint256 roundId, address agent) internal {
-    //     Round storage round = rounds[roundId];
-    //     AgentPosition storage position = round.agentPositions[agent];
-    //     if (!position.hasDecided) {
-    //         for (uint256 i; i < activeAgents.length; i++) {
-    //             address user = activeAgents[i];
-    //             UserBet storage userBet = round.bets[user];
-    //             if (userBet.bettype == BetType.BUY) {
-    //                 (bool success,) = payable(user).call{value: userBet.amount}("");
-    //                 if (!success) revert Room_TransferFailed();
-    //             } else {
-    //                 (bool success,) = payable(user).call{value: userBet.amount}("");
-    //                 if (!success) revert Room_TransferFailed();
-    //             }
-    //         }
-    //     }
-    // }
 
     function resolveMarket() public {
         Round storage round = rounds[currentRoundId];
@@ -406,10 +374,6 @@ contract Room is Ownable, ReentrancyGuard {
         (,, uint256 roomCreatorPercent, uint256 agentCreatorPercent, uint256 daoPercent) = Core(payable(core)).getFees();
         uint256 basisPoint = Core(payable(core)).BASIS_POINTS();
 
-        // Calculate cuts based on percentages (assuming BASIS_POINTS is 1000)
-        // Creator: 2% = 20
-        // Agent Creator: 2% = 20
-        // DAO: 1% = 10
         uint256 roomCreatorCut = (totalFees * roomCreatorPercent) / basisPoint;
         uint256 agentCreatorCut = (totalFees * agentCreatorPercent) / basisPoint;
         uint256 daoCut = (totalFees * daoPercent) / basisPoint;
@@ -488,21 +452,6 @@ contract Room is Ownable, ReentrancyGuard {
 
         emit PvpActionsUpdated(verb, category, fee, duration, newAction, !newAction);
     }
-
-    // TODO Commented to shave space
-    // function removeSupportedPvpActions(string memory verb) external onlyGameMasterOrCreator {
-    //     delete supportedPvpActions[verb];
-
-    //     for (uint256 i = 0; i < supportedPvpVerbs.length; i++) {
-    //         if (keccak256(abi.encodePacked(supportedPvpVerbs[i])) == keccak256(abi.encodePacked(verb))) {
-    //             supportedPvpVerbs[i] = supportedPvpVerbs[supportedPvpVerbs.length - 1];
-    //             supportedPvpVerbs.pop();
-    //             break;
-    //         }
-    //     }
-
-    //     emit PvpActionRemoved(verb);
-    // }
 
     function invokePvpAction(address target, string memory verb, bytes memory parameters) public payable {
         if (parameters.length > 256) {
