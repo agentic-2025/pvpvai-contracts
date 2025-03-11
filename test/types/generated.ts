@@ -2549,12 +2549,6 @@ export const roomAbi = [
     type: 'event',
     anonymous: false,
     inputs: [
-      {
-        name: 'roundId',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: true,
-      },
       { name: 'verb', internalType: 'string', type: 'string', indexed: true },
       {
         name: 'target',

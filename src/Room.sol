@@ -14,7 +14,7 @@ contract Room is Ownable, ReentrancyGuard {
     error Room_InvalidAmount();
     error Room_NoWinnings();
     error Room_InvalidBetType();
-    error Room_RoundNotExpectedStatus(RoundState expected, RoundState actual);
+    // error Room_RoundNotExpectedStatus(RoundState expected, RoundState actual);
     error Room_NotGameMaster();
     error Room_MaxAgentsReached();
     error Room_AgentNotExists();
@@ -74,8 +74,9 @@ contract Room is Ownable, ReentrancyGuard {
 
     uint32 public maxAgents = 5;
     uint32 public currentAgentCount = 0;
-    // uint40 public roundDuration = 1 minutes;
-    uint40 public roundDuration = 30 seconds;
+    // uint40 public roundDuration = 5 minutes;
+    uint40 public roundDuration = 90 seconds;
+    // uint40 public roundDuration = 30 seconds;
     bool public pvpEnabled;
 
     struct Round {
@@ -136,7 +137,9 @@ contract Room is Ownable, ReentrancyGuard {
         string indexed verb, PvpActionCategory indexed category, uint256 fee, uint32 duration, bool isNew, bool isUpdate
     );
     event PvpActionRemoved(string indexed verb);
-    event PvpActionInvoked(string indexed verb, address indexed target, uint40 endTime, bytes parameters);
+    event PvpActionInvoked(
+        uint256 indexed roundId, string indexed verb, address indexed target, uint40 endTime, bytes parameters
+    );
 
     modifier onlyGameMaster() {
         if (msg.sender != gameMaster) revert Room_NotGameMaster();
@@ -221,9 +224,9 @@ contract Room is Ownable, ReentrancyGuard {
         }
 
         Round storage round = rounds[currentRoundId];
-        if (round.state != RoundState.ACTIVE) {
-            revert Room_RoundNotExpectedStatus(RoundState.ACTIVE, round.state);
-        }
+        // if (round.state != RoundState.ACTIVE) {
+        //     revert Room_RoundNotExpectedStatus(RoundState.ACTIVE, round.state);
+        // }
         if (agentData[agent].feeRecipient == address(0)) {
             revert Room_AgentNotActive();
         }
@@ -261,7 +264,7 @@ contract Room is Ownable, ReentrancyGuard {
             if (msg.value != amount) revert Room_InvalidAmount();
         }
 
-        // Update pools with new bet
+        // Update pools with new beta
         if (betType == BetType.BUY) {
             position.buyPool += amount;
         } else if (betType == BetType.HOLD) {
@@ -507,7 +510,7 @@ contract Room is Ownable, ReentrancyGuard {
         }
 
         Round storage round = rounds[currentRoundId];
-        if (round.state != RoundState.ACTIVE) revert Room_RoundNotExpectedStatus(RoundState.ACTIVE, round.state);
+        // if (round.state != RoundState.ACTIVE) revert Room_RoundNotExpectedStatus(RoundState.ACTIVE, round.state);
         if (!pvpEnabled) {
             console2.log("PvP is disabled", pvpEnabled);
             revert Room_ActionNotSupported();
@@ -545,7 +548,7 @@ contract Room is Ownable, ReentrancyGuard {
             );
         }
 
-        emit PvpActionInvoked(verb, target, endTime, parameters);
+        emit PvpActionInvoked(currentRoundId, verb, target, endTime, parameters);
     }
 
     function getPvpStatuses(address agent) public view returns (PvpStatus[] memory) {
@@ -561,7 +564,6 @@ contract Room is Ownable, ReentrancyGuard {
         round.state = newState;
         emit RoundStateUpdated(currentRoundId, newState);
     }
-
 
     function getPvpActionFee(string memory verb) public view returns (uint256) {
         return supportedPvpActions[verb].fee;

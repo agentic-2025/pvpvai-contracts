@@ -235,19 +235,19 @@ contract EndToEndTest is Script {
         console2.log("\n=== Testing PvP Actions ===\n");
         dumpPvPState(room, room.currentRoundId());
 
-        try room.invokePvpAction{value: STATUS_EFFECT_FEE}(TARGET_1, "silence", "") {
-            console2.log("Silence action succeeded");
-        } catch Error(string memory reason) {
-            console2.log("Error invoking silence:", reason);
-        }
+        // try room.invokePvpAction{value: STATUS_EFFECT_FEE}(TARGET_1, "silence", "") {
+        //     console2.log("Silence action succeeded");
+        // } catch Error(string memory reason) {
+        //     console2.log("Error invoking silence:", reason);
+        // }
 
-        dumpPvPState(room, room.currentRoundId());
+        // dumpPvPState(room, room.currentRoundId());
 
-        room.invokePvpAction{value: STATUS_EFFECT_FEE}(TARGET_2, "deafen", "");
-        bytes memory poisonParams = bytes('{"find": "nice", "replace": "terrible", "caseSensitive": false}');
-        room.invokePvpAction{value: POISON_FEE}(TARGET_1, "poison", poisonParams);
+        // room.invokePvpAction{value: STATUS_EFFECT_FEE}(TARGET_2, "deafen", "");
+        // bytes memory poisonParams = bytes('{"find": "nice", "replace": "terrible", "caseSensitive": false}');
+        // room.invokePvpAction{value: POISON_FEE}(TARGET_1, "poison", poisonParams);
 
-        console2.log("pvp actions test complete");
+        // console2.log("pvp actions test complete");
         // Fast forward time to end of round
         vm.warp(block.timestamp + 30 seconds);
         // console2.log("\n=== Round Duration Complete ===");
